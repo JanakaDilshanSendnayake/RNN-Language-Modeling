@@ -2,6 +2,10 @@
 
 import numpy as np
 import collections
+import torch
+import torch.nn as nn
+import random
+
 
 #####################
 # MODELS FOR PART 1 #
@@ -33,10 +37,46 @@ class FrequencyBasedClassifier(ConsonantVowelClassifier):
             return 1
 
 
-class RNNClassifier(ConsonantVowelClassifier):
-    def predict(self, context):
-        raise Exception("Implement me")
+class RNNClassifier(ConsonantVowelClassifier, nn.Module):
+    def __init__(self, input_size, unique_charactor_amount, hidden_size, hidden_layer1,  vocab_index):
+        super(RNNClassifier, self).__init__()
+        self.charactor_embedding = nn.Embedding(num_embeddings=unique_charactor_amount, embedding_dim=input_size)
+        self.lstm = nn.LSTM(input_size=input_size,      # embedding dimension
+                            hidden_size=hidden_size,             # Number of LSTM units
+                            num_layers=1,               # Number of LSTM layers
+                            batch_first=True)           # Input shape will be [batch_size, seq_length, input_size]
+        self.dropout = nn.Dropout(p=0.5)
+        self.relu = nn.ReLU()
+        self.linear = nn.Linear(hidden_size, hidden_layer1)
+        self.linear2 = nn.Linear(hidden_layer1, 2)
+        self.vocab_index = vocab_index
 
+    def forward(self, x):
+        embedded_vector = self.charactor_embedding(x)
+        output, (hidden, cell) = self.lstm(embedded_vector)
+
+        hidden = hidden.squeeze()
+
+        val = self.linear(hidden)
+
+        val = self.relu(val)
+
+        val =  self.dropout(val)
+
+        predicted_val =  self.linear2(val)
+
+        return predicted_val
+
+
+    def predict(self, context):
+        index_string = torch.FloatTensor([self.vocab_index.index_of(x) for x in context]).int()
+
+        predicted = self.forward(index_string)
+
+        predicted_class = torch.argmax(predicted)
+
+        return predicted_class
+        # raise Exception("Implement me")
 
 def train_frequency_based_classifier(cons_exs, vowel_exs):
     consonant_counts = collections.Counter()
@@ -46,6 +86,19 @@ def train_frequency_based_classifier(cons_exs, vowel_exs):
     for ex in vowel_exs:
         vowel_counts[ex[-1]] += 1
     return FrequencyBasedClassifier(consonant_counts, vowel_counts)
+
+
+def raw_string_to_indices(train_cons, train_vowel, vocab_index):
+   cons_data = [[train_cons[index], 0 , index] for index in range(0, len(train_cons))]
+   vowels_data = [[train_vowel[index], 1 , len(train_cons) + index] for index in range(0, len(train_vowel))]
+
+   all_data = cons_data + vowels_data
+
+   for index in all_data:
+       index_string = [vocab_index.index_of(x)for x in index[0]]
+       index.append(index_string)
+
+   return all_data
 
 
 def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, dev_vowel_exs, vocab_index):
@@ -58,7 +111,77 @@ def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, de
     :param vocab_index: an Indexer of the character vocabulary (27 characters)
     :return: an RNNClassifier instance trained on the given data
     """
-    raise Exception("Implement me")
+
+    data = raw_string_to_indices(train_cons_exs, train_vowel_exs, vocab_index)
+
+    n_samples = len(data)
+    n_test_samples = len(dev_cons_exs) + len(dev_vowel_exs)
+    epochs = 20
+    batch_size = 4
+    unique_charactor_amount = vocab_index.__len__()
+
+    rnn_classification_model = RNNClassifier(input_size=30, unique_charactor_amount=unique_charactor_amount, hidden_size=32,hidden_layer1=16, vocab_index=vocab_index)
+
+    loss_function = nn.CrossEntropyLoss()
+
+    optimizer = torch.optim.Adam(rnn_classification_model.parameters(), lr=0.005)
+
+    random.seed(10)
+
+    for epoch in range(epochs):
+        rnn_classification_model.train()
+        total_loss = 0
+        random.shuffle(data)
+
+        for i in range(0, n_samples, batch_size):
+            batch_data = data[i:min(i + batch_size, n_samples)]
+
+            batch_index_data = torch.LongTensor([x[3] for x in batch_data])
+            batch_label = torch.LongTensor([x[1] for x in batch_data])
+
+            optimizer.zero_grad()
+            y = rnn_classification_model(batch_index_data)
+            loss = loss_function(y, batch_label)
+            total_loss += loss.item()
+
+            loss.backward()
+            optimizer.step()
+
+        # Calculate average loss properly accounting for possibly incomplete final batch
+        n_batches = (n_samples + batch_size - 1) // batch_size
+        avg_loss = total_loss / n_batches
+
+        # Evaluation phase
+        rnn_classification_model.eval()
+        with torch.no_grad():
+            correct_train = 0
+            for index in train_cons_exs:
+                predicted_val = rnn_classification_model.predict(index)
+                if predicted_val == 0:
+                    correct_train += 1
+
+            for index in train_vowel_exs:
+                predicted_val = rnn_classification_model.predict(index)
+                if predicted_val == 1:
+                    correct_train += 1
+
+            correct_test = 0
+            for index in dev_cons_exs:
+                predicted_val = rnn_classification_model.predict(index)
+                if predicted_val == 0:
+                    correct_test += 1
+
+            for index in dev_vowel_exs:
+                predicted_val = rnn_classification_model.predict(index)
+                if predicted_val == 1:
+                    correct_test += 1
+
+        print(f'Epoch {epoch + 1}:')
+        print(f'Training Loss: {avg_loss:.4f}')
+        print(f'Training Accuracy: {correct_train / n_samples:.3f}')
+        print(f'Test Accuracy: {correct_test / n_test_samples:.3f}')
+
+    return rnn_classification_model
 
 
 #####################
@@ -124,4 +247,5 @@ def train_lm(args, train_text, dev_text, vocab_index):
     :param vocab_index: an Indexer of the character vocabulary (27 characters)
     :return: an RNNLanguageModel instance trained on the given data
     """
+
     raise Exception("Implement me")

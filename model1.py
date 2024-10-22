@@ -95,6 +95,7 @@ def prepare_data(train_cons_exs, train_vowel_exs):
         train_exs.append([ex, 0])
     for ex in train_vowel_exs:
         train_exs.append([ex, 1])
+    print(train_exs)
     return train_exs
 
 def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, dev_vowel_exs, vocab_index):
