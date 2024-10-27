@@ -44,18 +44,24 @@ class RNNClassifier(ConsonantVowelClassifier, nn.Module):
         self.lstm = nn.LSTM(input_size=input_size,      # embedding dimension
                             hidden_size=hidden_size,             # Number of LSTM units
                             num_layers=1,               # Number of LSTM layers
-                            batch_first=True)           # Input shape will be [batch_size, seq_length, input_size]
-        self.dropout = nn.Dropout(p=0.5)
+                            batch_first=True,
+                            )           # Input shape will be [batch_size, seq_length, input_size]
+        self.dropout = nn.Dropout(p=0.3)
         self.relu = nn.ReLU()
         self.linear = nn.Linear(hidden_size, hidden_layer1)
         self.linear2 = nn.Linear(hidden_layer1, 2)
         self.vocab_index = vocab_index
 
     def forward(self, x):
+        if len(x.shape) == 1:
+            x = x.unsqueeze(0)
+
         embedded_vector = self.charactor_embedding(x)
         output, (hidden, cell) = self.lstm(embedded_vector)
 
         hidden = hidden.squeeze()
+
+        hidden = hidden.squeeze(0)
 
         val = self.linear(hidden)
 
@@ -67,16 +73,11 @@ class RNNClassifier(ConsonantVowelClassifier, nn.Module):
 
         return predicted_val
 
-
     def predict(self, context):
-        index_string = torch.FloatTensor([self.vocab_index.index_of(x) for x in context]).int()
-
+        index_string = torch.tensor([self.vocab_index.index_of(x) for x in context], dtype=torch.long)
         predicted = self.forward(index_string)
-
-        predicted_class = torch.argmax(predicted)
-
+        predicted_class = torch.argmax(predicted, dim=-1)  # Add dimension for argmax
         return predicted_class
-        # raise Exception("Implement me")
 
 def train_frequency_based_classifier(cons_exs, vowel_exs):
     consonant_counts = collections.Counter()
@@ -117,7 +118,7 @@ def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, de
     n_samples = len(data)
     n_test_samples = len(dev_cons_exs) + len(dev_vowel_exs)
     epochs = 20
-    batch_size = 4
+    batch_size = 1
     unique_charactor_amount = vocab_index.__len__()
 
     rnn_classification_model = RNNClassifier(input_size=30, unique_charactor_amount=unique_charactor_amount, hidden_size=32,hidden_layer1=16, vocab_index=vocab_index)
@@ -141,6 +142,13 @@ def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, de
 
             optimizer.zero_grad()
             y = rnn_classification_model(batch_index_data)
+
+            # Ensure outputs and labels have correct shape
+            if batch_size == 1:
+                # Add batch dimension
+                y = y.unsqueeze(0)
+
+
             loss = loss_function(y, batch_label)
             total_loss += loss.item()
 
@@ -225,12 +233,48 @@ class UniformLanguageModel(LanguageModel):
     def get_log_prob_sequence(self, next_chars, context):
         return np.log(1.0/self.voc_size) * len(next_chars)
 
+#
+# class  RNNLanguageArchitecture(nn.Module):
+#     def __init__(self, unique_charactor_amount, embedding_dim, hidden_size):
+#         super(RNNLanguageArchitecture, self).__init__()
+#         self.embedding = nn.Embedding(num_embeddings=unique_charactor_amount, embedding_dim=embedding_dim)
+#         self.lstm = nn.LSTM(input_size=embedding_dim,
+#                             hidden_size=hidden_size,
+#                             num_layers=1,
+#                             batch_first=True)
+#         self.linear = nn.Linear(hidden_size, unique_charactor_amount)
+#
+#     def forward(self, x):
+#         embedded = self.embedding(x)
+#
+#         print(embedded)
+#
+#         return embedded
 
-class RNNLanguageModel(LanguageModel):
+
+class RNNLanguageModel(LanguageModel, nn.Module):
     def __init__(self, model_emb, model_dec, vocab_index):
-        self.model_emb = model_emb
-        self.model_dec = model_dec
-        self.vocab_index = vocab_index
+        super(RNNLanguageModel, self).__init__()
+        self.model_emb = model_emb # embedding dimension
+        self.model_dec = model_dec # hidden layer size
+        self.vocab_index = vocab_index # vocab index
+
+        self.embedding = nn.Embedding(num_embeddings=vocab_index.__len__(), embedding_dim=model_emb)
+
+        self.lstm = nn.LSTM(input_size=model_emb,
+                            hidden_size=model_dec,
+                            num_layers=1,
+                            batch_first=True)
+
+    def forward(self, x):
+        embedded = self.embedding(x)
+
+        output, (hidden, cell) = self.lstm(embedded)
+
+
+
+        return output
+
 
     def get_log_prob_single(self, next_char, context):
         raise Exception("Implement me")
@@ -238,6 +282,25 @@ class RNNLanguageModel(LanguageModel):
     def get_log_prob_sequence(self, next_chars, context):
         raise Exception("Implement me")
 
+
+def chunk_required_data(text, chunk_size, vocab_index, overlap_size=1):
+    chunks_extracted = []
+    target_extracted = []
+
+    for index in range(0, len(text) - chunk_size, overlap_size):
+        chunks_extracted.append(text[index:index + chunk_size])
+        target_extracted.append(text[index + 1:index + chunk_size + 1])
+
+    chunks_extracted, target_extracted = extract_required_indices(chunks_extracted, target_extracted, vocab_index)
+
+    return chunks_extracted, target_extracted
+
+
+def extract_required_indices(extracted_text, extracted_target, vocab_index):
+    text_indices = np.asarray([[vocab_index.index_of(x) for x in index] for index in extracted_text])
+    target_indices = np.asarray([[vocab_index.index_of(x) for x in index] for index in extracted_target])
+
+    return text_indices, target_indices
 
 def train_lm(args, train_text, dev_text, vocab_index):
     """
@@ -247,5 +310,38 @@ def train_lm(args, train_text, dev_text, vocab_index):
     :param vocab_index: an Indexer of the character vocabulary (27 characters)
     :return: an RNNLanguageModel instance trained on the given data
     """
+
+    chunk_size = 50
+    overlap_size = 1
+    learning_rate = 0.005
+    epochs = 10
+    batch_size = 2
+
+    chunked_train_text , target_train= chunk_required_data(train_text, chunk_size, vocab_index, overlap_size)
+    chunked_dev_text, target_test = chunk_required_data(dev_text, chunk_size, vocab_index, overlap_size)
+
+    train_chunks = torch.from_numpy(chunked_train_text)
+    train_targets = torch.from_numpy(target_train)
+    dev_chunks = torch.from_numpy(chunked_dev_text)
+    dev_targets = torch.from_numpy(target_test)
+
+    # for index in range(0, len(chunked_train_text)):
+    #     print(chunked_train_text[index],  target_train[index])
+    #
+    # for index in range(0, len(chunked_dev_text)):
+    #     print(chunked_dev_text[index],  target_test[index])
+    #
+    #
+    # print("Train text: ", len(chunked_train_text))
+    # print("Dev text: ", len(chunked_dev_text))
+
+
+    RNNLanguageModel1 = RNNLanguageModel(model_emb=30, model_dec=50, vocab_index=vocab_index)
+
+    embedding = RNNLanguageModel1(train_chunks)
+
+    print(embedding.shape)
+
+
 
     raise Exception("Implement me")
