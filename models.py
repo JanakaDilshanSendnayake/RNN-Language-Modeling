@@ -117,11 +117,11 @@ def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, de
 
     n_samples = len(data)
     n_test_samples = len(dev_cons_exs) + len(dev_vowel_exs)
-    epochs = 20
-    batch_size = 1
+    epochs = 5
+    batch_size = 4
     unique_charactor_amount = vocab_index.__len__()
 
-    rnn_classification_model = RNNClassifier(input_size=30, unique_charactor_amount=unique_charactor_amount, hidden_size=32,hidden_layer1=16, vocab_index=vocab_index)
+    rnn_classification_model = RNNClassifier(input_size=20, unique_charactor_amount=unique_charactor_amount, hidden_size=16,hidden_layer1=8, vocab_index=vocab_index)
 
     loss_function = nn.CrossEntropyLoss()
 
@@ -233,31 +233,14 @@ class UniformLanguageModel(LanguageModel):
     def get_log_prob_sequence(self, next_chars, context):
         return np.log(1.0/self.voc_size) * len(next_chars)
 
-#
-# class  RNNLanguageArchitecture(nn.Module):
-#     def __init__(self, unique_charactor_amount, embedding_dim, hidden_size):
-#         super(RNNLanguageArchitecture, self).__init__()
-#         self.embedding = nn.Embedding(num_embeddings=unique_charactor_amount, embedding_dim=embedding_dim)
-#         self.lstm = nn.LSTM(input_size=embedding_dim,
-#                             hidden_size=hidden_size,
-#                             num_layers=1,
-#                             batch_first=True)
-#         self.linear = nn.Linear(hidden_size, unique_charactor_amount)
-#
-#     def forward(self, x):
-#         embedded = self.embedding(x)
-#
-#         print(embedded)
-#
-#         return embedded
-
 
 class RNNLanguageModel(LanguageModel, nn.Module):
-    def __init__(self, model_emb, model_dec, vocab_index):
+    def __init__(self, model_emb, model_dec, vocab_index, device='cpu'):
         super(RNNLanguageModel, self).__init__()
         self.model_emb = model_emb # embedding dimension
         self.model_dec = model_dec # hidden layer size
         self.vocab_index = vocab_index # vocab index
+        self.device = device
 
         self.embedding = nn.Embedding(num_embeddings=vocab_index.__len__(), embedding_dim=model_emb)
 
@@ -266,21 +249,69 @@ class RNNLanguageModel(LanguageModel, nn.Module):
                             num_layers=1,
                             batch_first=True)
 
-    def forward(self, x):
+        self.linear = nn.Linear(model_dec, vocab_index.__len__())
+
+        self.softmax = nn.LogSoftmax(dim=-1)
+
+        self.to(device)
+
+    def init_hidden(self, batch_size=1):
+        return (torch.zeros(1, batch_size, self.model_dec, device=self.device),
+                torch.zeros(1, batch_size, self.model_dec, device=self.device))
+
+    def forward(self, x, hidden=None):
+        if hidden is None:
+            hidden = self.init_hidden(x.size(0))
+
         embedded = self.embedding(x)
 
-        output, (hidden, cell) = self.lstm(embedded)
+        output, (hidden, cell) = self.lstm(embedded, hidden)
 
+        linear = self.linear(output)
+        final_output = self.softmax(linear)
 
+        print(final_output.shape)
 
-        return output
-
+        return final_output, (hidden, cell)
 
     def get_log_prob_single(self, next_char, context):
-        raise Exception("Implement me")
+        print("Next Char : ", next_char, "Context : ", context)
+        # raise Exception("Implement me")
+        self.eval()
+
+        context_text = torch.tensor([[self.vocab_index.index_of(x) for x in context]], dtype=torch.long).to(self.device)
+
+        print(context_text.shape)
+
+        with torch.no_grad():
+            y_output , hidden_output = self.forward(context_text)
+
+            last_charactor_predicted = y_output[0, -1]
+
+            print(last_charactor_predicted.shape)
+
+            print(last_charactor_predicted)
+
+            next_charactor_actual_index = self.vocab_index.index_of(next_char)
+
+            log_probability = last_charactor_predicted[next_charactor_actual_index]
+
+            return log_probability
+
 
     def get_log_prob_sequence(self, next_chars, context):
-        raise Exception("Implement me")
+        total_log_probability = 0
+
+        current_context =  context
+
+        for index in range(0, len(next_chars)):
+            log_probability = self.get_log_prob_single(next_chars[index], current_context)
+
+            total_log_probability += log_probability
+
+            current_context = current_context[1:] + next_chars[index]
+
+        return total_log_probability.cpu().item()
 
 
 def chunk_required_data(text, chunk_size, vocab_index, overlap_size=1):
@@ -311,19 +342,26 @@ def train_lm(args, train_text, dev_text, vocab_index):
     :return: an RNNLanguageModel instance trained on the given data
     """
 
-    chunk_size = 50
+    chunk_size = 10
     overlap_size = 1
     learning_rate = 0.005
-    epochs = 10
+    epochs = 5
     batch_size = 2
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
 
     chunked_train_text , target_train= chunk_required_data(train_text, chunk_size, vocab_index, overlap_size)
     chunked_dev_text, target_test = chunk_required_data(dev_text, chunk_size, vocab_index, overlap_size)
 
-    train_chunks = torch.from_numpy(chunked_train_text)
-    train_targets = torch.from_numpy(target_train)
-    dev_chunks = torch.from_numpy(chunked_dev_text)
-    dev_targets = torch.from_numpy(target_test)
+    train_chunks = torch.from_numpy(chunked_train_text).long().to(device)
+    train_targets = torch.from_numpy(target_train).long().to(device)
+    dev_chunks = torch.from_numpy(chunked_dev_text).long().to(device)
+    dev_targets = torch.from_numpy(target_test).long().to(device)
+
+    language_model = RNNLanguageModel(model_emb=30, model_dec=50, vocab_index=vocab_index, device=str(device))
+    loss_function = nn.NLLLoss().to(device)  # Negative log likelihood
+    optimizer = torch.optim.Adam(language_model.parameters(), lr=learning_rate)
 
     # for index in range(0, len(chunked_train_text)):
     #     print(chunked_train_text[index],  target_train[index])
@@ -336,12 +374,32 @@ def train_lm(args, train_text, dev_text, vocab_index):
     # print("Dev text: ", len(chunked_dev_text))
 
 
-    RNNLanguageModel1 = RNNLanguageModel(model_emb=30, model_dec=50, vocab_index=vocab_index)
+    for epoch in range(epochs):
+        total_loss = 0
+        language_model.train()
+        for i in range(0, len(train_chunks), batch_size):
+            batch_chunks = train_chunks[i:i + batch_size]
+            batch_targets = train_targets[i:i + batch_size]
 
-    embedding = RNNLanguageModel1(train_chunks)
+            optimizer.zero_grad()
 
-    print(embedding.shape)
+            y_output , hidden_output = language_model(batch_chunks)
 
+            y_output = y_output.view(-1, vocab_index.__len__())
+            batch_targets = batch_targets.view(-1)
 
+            loss = loss_function(y_output, batch_targets)
+            total_loss += loss.item()
 
-    raise Exception("Implement me")
+            loss.backward()
+
+            optimizer.step()
+
+            print(f"Epoch : {epoch}", [torch.argmax(x).cpu().item() for x in y_output], batch_targets)
+
+            # print("Predicted y : ", y.shape, "Hidden Output : ", hidden_output.shape)
+
+    # raise Exception("Implement me")
+
+    return language_model
+
