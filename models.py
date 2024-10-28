@@ -38,7 +38,7 @@ class FrequencyBasedClassifier(ConsonantVowelClassifier):
 
 
 class RNNClassifier(ConsonantVowelClassifier, nn.Module):
-    def __init__(self, input_size, unique_charactor_amount, hidden_size, hidden_layer1,  vocab_index):
+    def __init__(self, input_size, unique_charactor_amount, hidden_size, hidden_layer1,  vocab_index, device='cpu'):
         super(RNNClassifier, self).__init__()
         self.charactor_embedding = nn.Embedding(num_embeddings=unique_charactor_amount, embedding_dim=input_size)
         self.lstm = nn.LSTM(input_size=input_size,      # embedding dimension
@@ -51,6 +51,9 @@ class RNNClassifier(ConsonantVowelClassifier, nn.Module):
         self.linear = nn.Linear(hidden_size, hidden_layer1)
         self.linear2 = nn.Linear(hidden_layer1, 2)
         self.vocab_index = vocab_index
+        self.device = device
+
+        self.to(device)
 
     def forward(self, x):
         if len(x.shape) == 1:
@@ -74,7 +77,7 @@ class RNNClassifier(ConsonantVowelClassifier, nn.Module):
         return predicted_val
 
     def predict(self, context):
-        index_string = torch.tensor([self.vocab_index.index_of(x) for x in context], dtype=torch.long)
+        index_string = torch.tensor([self.vocab_index.index_of(x) for x in context], dtype=torch.long, device=self.device)
         predicted = self.forward(index_string)
         predicted_class = torch.argmax(predicted, dim=-1)  # Add dimension for argmax
         return predicted_class
@@ -119,13 +122,14 @@ def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, de
 
     n_samples = len(data)
     n_test_samples = len(dev_cons_exs) + len(dev_vowel_exs)
-    epochs = 5
+    epochs = 10
     batch_size = 4
     unique_charactor_amount = vocab_index.__len__()
 
-    rnn_classification_model = RNNClassifier(input_size=20, unique_charactor_amount=unique_charactor_amount, hidden_size=16,hidden_layer1=8, vocab_index=vocab_index)
+    rnn_classification_model = RNNClassifier(input_size=20, unique_charactor_amount=unique_charactor_amount,
+                                             hidden_size=16,hidden_layer1=8, vocab_index=vocab_index, device=str(device))
 
-    loss_function = nn.CrossEntropyLoss()
+    loss_function = nn.CrossEntropyLoss().to(device)
 
     optimizer = torch.optim.Adam(rnn_classification_model.parameters(), lr=0.005)
 
@@ -139,8 +143,8 @@ def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, de
         for i in range(0, n_samples, batch_size):
             batch_data = data[i:min(i + batch_size, n_samples)]
 
-            batch_index_data = torch.LongTensor([x[3] for x in batch_data])
-            batch_label = torch.LongTensor([x[1] for x in batch_data])
+            batch_index_data = torch.LongTensor([x[3] for x in batch_data]).to(device)
+            batch_label = torch.LongTensor([x[1] for x in batch_data]).to(device)
 
             optimizer.zero_grad()
             y = rnn_classification_model(batch_index_data)
