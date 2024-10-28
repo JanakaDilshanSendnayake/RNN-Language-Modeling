@@ -113,6 +113,8 @@ def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, de
     :return: an RNNClassifier instance trained on the given data
     """
 
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
     data = raw_string_to_indices(train_cons_exs, train_vowel_exs, vocab_index)
 
     n_samples = len(data)
@@ -346,10 +348,9 @@ def train_lm(args, train_text, dev_text, vocab_index):
     overlap_size = 1
     learning_rate = 0.005
     epochs = 5
-    batch_size = 2
+    batch_size = 1
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Using device: {device}")
 
     chunked_train_text , target_train= chunk_required_data(train_text, chunk_size, vocab_index, overlap_size)
     chunked_dev_text, target_test = chunk_required_data(dev_text, chunk_size, vocab_index, overlap_size)
