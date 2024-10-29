@@ -123,17 +123,16 @@ def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, de
     n_samples = len(data)
     n_test_samples = len(dev_cons_exs) + len(dev_vowel_exs)
     epochs = 10
-    batch_size = 4
+    batch_size = 2
     unique_charactor_amount = vocab_index.__len__()
 
     rnn_classification_model = RNNClassifier(input_size=20, unique_charactor_amount=unique_charactor_amount,
-                                             hidden_size=16,hidden_layer1=8, vocab_index=vocab_index, device=str(device))
+                                             hidden_size=32,hidden_layer1=16, vocab_index=vocab_index, device=str(device))
 
     loss_function = nn.CrossEntropyLoss().to(device)
 
-    optimizer = torch.optim.Adam(rnn_classification_model.parameters(), lr=0.005)
+    optimizer = torch.optim.Adam(rnn_classification_model.parameters(), lr=0.001)
 
-    random.seed(10)
 
     for epoch in range(epochs):
         rnn_classification_model.train()
@@ -197,7 +196,6 @@ def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, de
 
     return rnn_classification_model
 
-
 #####################
 # MODELS FOR PART 2 #
 #####################
@@ -248,14 +246,21 @@ class RNNLanguageModel(LanguageModel, nn.Module):
         self.vocab_index = vocab_index # vocab index
         self.device = device
 
-        self.embedding = nn.Embedding(num_embeddings=vocab_index.__len__(), embedding_dim=model_emb)
+        self.sos = vocab_index.__len__()
+
+        self.vocab_size = vocab_index.__len__()
+
+
+        self.embedding = nn.Embedding(num_embeddings=self.vocab_size + 1, embedding_dim=model_emb)
 
         self.lstm = nn.LSTM(input_size=model_emb,
                             hidden_size=model_dec,
                             num_layers=1,
                             batch_first=True)
 
-        self.linear = nn.Linear(model_dec, vocab_index.__len__())
+        self.linear = nn.Linear(model_dec, self.vocab_size)
+
+        self.dropout = nn.Dropout(0.5)
 
         self.softmax = nn.LogSoftmax(dim=-1)
 
@@ -271,12 +276,13 @@ class RNNLanguageModel(LanguageModel, nn.Module):
 
         embedded = self.embedding(x)
 
-        output, (hidden, cell) = self.lstm(embedded, hidden)
+        output, (hidden, cell) = self.lstm(embedded)
+
+        output = self.dropout(output)
 
         linear = self.linear(output)
-        final_output = self.softmax(linear)
 
-        print(final_output.shape)
+        final_output = self.softmax(linear)
 
         return final_output, (hidden, cell)
 
@@ -285,7 +291,14 @@ class RNNLanguageModel(LanguageModel, nn.Module):
         # raise Exception("Implement me")
         self.eval()
 
-        context_text = torch.tensor([[self.vocab_index.index_of(x) for x in context]], dtype=torch.long).to(self.device)
+        # Add SOS token at the start if context is empty
+        if not context:
+            context_indices = [self.vocab_index.index_of("sos")]
+        else:
+            context_indices = [self.vocab_index.index_of(x) for x in context]
+
+        context_text = torch.tensor([context_indices], dtype=torch.long).to(self.device)
+
 
         print(context_text.shape)
 
@@ -301,6 +314,8 @@ class RNNLanguageModel(LanguageModel, nn.Module):
             next_charactor_actual_index = self.vocab_index.index_of(next_char)
 
             log_probability = last_charactor_predicted[next_charactor_actual_index]
+
+            print("predicted : " , self.vocab_index.get_object(torch.argmax(last_charactor_predicted).cpu().item()), "actual",  next_char)
 
             return log_probability
 
@@ -325,8 +340,8 @@ def chunk_required_data(text, chunk_size, vocab_index, overlap_size=1):
     target_extracted = []
 
     for index in range(0, len(text) - chunk_size, overlap_size):
-        chunks_extracted.append(text[index:index + chunk_size])
-        target_extracted.append(text[index + 1:index + chunk_size + 1])
+        chunks_extracted.append(text[index:index + chunk_size - 1])
+        target_extracted.append(text[index :index + chunk_size])
 
     chunks_extracted, target_extracted = extract_required_indices(chunks_extracted, target_extracted, vocab_index)
 
@@ -334,10 +349,14 @@ def chunk_required_data(text, chunk_size, vocab_index, overlap_size=1):
 
 
 def extract_required_indices(extracted_text, extracted_target, vocab_index):
-    text_indices = np.asarray([[vocab_index.index_of(x) for x in index] for index in extracted_text])
-    target_indices = np.asarray([[vocab_index.index_of(x) for x in index] for index in extracted_target])
+    # Prepend SOS token to each sequence instead of the whole list
+    text_indices = np.asarray([[27] + [vocab_index.index_of(x) for x in seq]
+                               for seq in extracted_text])
+    target_indices = np.asarray([[vocab_index.index_of(x) for x in index]
+                                 for index in extracted_target])
 
     return text_indices, target_indices
+
 
 def train_lm(args, train_text, dev_text, vocab_index):
     """
@@ -348,11 +367,12 @@ def train_lm(args, train_text, dev_text, vocab_index):
     :return: an RNNLanguageModel instance trained on the given data
     """
 
-    chunk_size = 10
+    chunk_size = 20
     overlap_size = 1
     learning_rate = 0.005
-    epochs = 5
+    epochs = 10
     batch_size = 1
+    burn_in_length = 4
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -371,24 +391,41 @@ def train_lm(args, train_text, dev_text, vocab_index):
     # for index in range(0, len(chunked_train_text)):
     #     print(chunked_train_text[index],  target_train[index])
     #
-    # for index in range(0, len(chunked_dev_text)):
-    #     print(chunked_dev_text[index],  target_test[index])
-    #
-    #
-    # print("Train text: ", len(chunked_train_text))
-    # print("Dev text: ", len(chunked_dev_text))
+    # # for index in range(0, len(chunked_dev_text)):
+    # #     print(chunked_dev_text[index],  target_test[index])
 
+
+    print("Train text: ", len(chunked_train_text))
+    print("Dev text: ", len(chunked_dev_text))
+    print("Vocab size: ", vocab_index.__len__())
+
+    hidden = None
 
     for epoch in range(epochs):
         total_loss = 0
         language_model.train()
+
         for i in range(0, len(train_chunks), batch_size):
             batch_chunks = train_chunks[i:i + batch_size]
             batch_targets = train_targets[i:i + batch_size]
 
             optimizer.zero_grad()
 
-            y_output , hidden_output = language_model(batch_chunks)
+            if burn_in_length > 0:
+                with torch.no_grad():
+                    # Only use burn_in_length characters for burn-in
+                    burn_in_input = batch_chunks[:, :burn_in_length]
+                    burn_out, hidden = language_model(burn_in_input)
+
+                model_input = batch_chunks[:, burn_in_length:]
+                batch_targets = batch_targets[:, burn_in_length:]
+            else:
+                model_input = batch_chunks
+
+            # Detach hidden state for next batch
+            hidden = tuple(h.detach() for h in hidden)
+
+            y_output, hidden = language_model(model_input, hidden)
 
             y_output = y_output.view(-1, vocab_index.__len__())
             batch_targets = batch_targets.view(-1)
@@ -397,14 +434,48 @@ def train_lm(args, train_text, dev_text, vocab_index):
             total_loss += loss.item()
 
             loss.backward()
-
             optimizer.step()
 
             print(f"Epoch : {epoch}", [torch.argmax(x).cpu().item() for x in y_output], batch_targets)
 
-            # print("Predicted y : ", y.shape, "Hidden Output : ", hidden_output.shape)
+        n_train_batches = (len(train_chunks) + batch_size - 1) // batch_size
 
-    # raise Exception("Implement me")
+        language_model.eval()
+        with torch.no_grad():
+            dev_total_loss = 0
+            hidden = None
+            for i in range(0, len(dev_chunks), batch_size):
+                batch_dev_chunks = dev_chunks[i:i + batch_size]
+                batch_dev_targets = dev_targets[i:i + batch_size]
+
+                if burn_in_length > 0:
+                    with torch.no_grad():
+                        # Only use burn_in_length characters for burn-in
+                        burn_in_input = batch_dev_chunks[:, :burn_in_length]
+                        burn_out, hidden = language_model(burn_in_input, hidden)
+
+                    model_input = batch_dev_chunks[:, burn_in_length:]
+                    batch_dev_targets = batch_dev_targets[:, burn_in_length:]
+                else:
+                    model_input = batch_dev_chunks
+
+                # Detach hidden state for next batch
+                hidden = tuple(h.detach() for h in hidden)
+
+                batch_dev_targets = batch_dev_targets.view(-1)
+
+                y_output, hidden_output = language_model(model_input)
+
+                y_output = y_output.view(-1, vocab_index.__len__())
+
+                dev_loss = loss_function(y_output, batch_dev_targets)
+
+                dev_total_loss += dev_loss.item()
+
+            n_test_batches = (len(dev_chunks) + batch_size - 1) // batch_size
+
+            print(f"Epoch : {epoch}")
+            print(f"Train Average Loss : {total_loss / n_train_batches}")
+            print(f"Test Average Loss : {dev_loss / n_test_batches }")
 
     return language_model
-
