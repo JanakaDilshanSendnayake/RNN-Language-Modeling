@@ -274,7 +274,7 @@ class RNNLanguageModel(LanguageModel, nn.Module):
 
         embedded = self.embedding(x)
 
-        output, (hidden, cell) = self.lstm(embedded)
+        output, (hidden, cell) = self.lstm(embedded, hidden)
 
         output = self.dropout(output)
 
@@ -284,9 +284,7 @@ class RNNLanguageModel(LanguageModel, nn.Module):
 
         return final_output, (hidden, cell)
 
-    def get_log_prob_single(self, next_char, context):
-        print("Next Char : ", next_char, "Context : ", context)
-        # raise Exception("Implement me")
+    def get_log_prob_single(self, next_char, context, hidden=None):
         self.eval()
 
         # Add SOS token at the start if context is empty
@@ -301,7 +299,7 @@ class RNNLanguageModel(LanguageModel, nn.Module):
         print(context_text.shape)
 
         with torch.no_grad():
-            y_output , hidden_output = self.forward(context_text)
+            y_output , hidden_output = self.forward(context_text, hidden)
 
             last_charactor_predicted = y_output[0, -1]
 
@@ -315,7 +313,7 @@ class RNNLanguageModel(LanguageModel, nn.Module):
 
             print("predicted : " , self.vocab_index.get_object(torch.argmax(last_charactor_predicted).cpu().item()), "actual",  next_char)
 
-            return log_probability
+            return log_probability, hidden_output
 
 
     def get_log_prob_sequence(self, next_chars, context):
@@ -323,8 +321,10 @@ class RNNLanguageModel(LanguageModel, nn.Module):
 
         current_context =  context
 
+        hidden = None
+
         for index in range(0, len(next_chars)):
-            log_probability = self.get_log_prob_single(next_chars[index], current_context)
+            log_probability, hidden = self.get_log_prob_single(next_chars[index], current_context, hidden)
 
             total_log_probability += log_probability
 
@@ -365,12 +365,12 @@ def train_lm(args, train_text, dev_text, vocab_index):
     :return: an RNNLanguageModel instance trained on the given data
     """
 
-    chunk_size = 20
+    chunk_size = 10
     overlap_size = 5
     learning_rate = 0.005
-    epochs = 2
-    batch_size = 1
-    burn_in_length = 4
+    epochs = 5
+    batch_size = 8
+    burn_in_length = 5
 
     vocab_index.add_and_get_index("sos")
 
@@ -384,7 +384,7 @@ def train_lm(args, train_text, dev_text, vocab_index):
     dev_chunks = torch.from_numpy(chunked_dev_text).long().to(device)
     dev_targets = torch.from_numpy(target_test).long().to(device)
 
-    language_model = RNNLanguageModel(model_emb=30, model_dec=50, vocab_index=vocab_index, device=str(device))
+    language_model = RNNLanguageModel(model_emb=16, model_dec=32, vocab_index=vocab_index, device=str(device))
     loss_function = nn.NLLLoss().to(device)  # Negative log likelihood
     optimizer = torch.optim.Adam(language_model.parameters(), lr=learning_rate)
 
@@ -423,12 +423,12 @@ def train_lm(args, train_text, dev_text, vocab_index):
                 model_input = batch_chunks
 
             # Detach hidden state for next batch
-            hidden = tuple(h.detach() for h in hidden)
+            hidden = (hidden[0].detach(), hidden[1].detach())
 
             y_output, hidden = language_model(model_input, hidden)
 
             y_output = y_output.view(-1, vocab_index.__len__() - 1)
-            batch_targets = batch_targets.view(-1)
+            batch_targets = batch_targets.reshape(-1)
 
             loss = loss_function(y_output, batch_targets)
             total_loss += loss.item()
@@ -436,35 +436,28 @@ def train_lm(args, train_text, dev_text, vocab_index):
             loss.backward()
             optimizer.step()
 
-            # print(f"Epoch : {epoch}", [torch.argmax(x).cpu().item() for x in y_output], batch_targets)
-
-        n_train_batches = (len(train_chunks) + batch_size - 1) // batch_size
+            print(f"Epoch : {epoch + 1}", [torch.argmax(x).cpu().item() for x in y_output], batch_targets)
 
         language_model.eval()
         with torch.no_grad():
             dev_total_loss = 0
-            hidden = None
             for i in range(0, len(dev_chunks), batch_size):
                 batch_dev_chunks = dev_chunks[i:i + batch_size]
                 batch_dev_targets = dev_targets[i:i + batch_size]
 
                 if burn_in_length > 0:
-                    with torch.no_grad():
-                        # Only use burn_in_length characters for burn-in
-                        burn_in_input = batch_dev_chunks[:, :burn_in_length]
-                        burn_out, hidden = language_model(burn_in_input, hidden)
+                    # Only use burn_in_length characters for burn-in
+                    burn_in_input = batch_dev_chunks[:, :burn_in_length]
+                    burn_out, hidden = language_model(burn_in_input)
 
                     model_input = batch_dev_chunks[:, burn_in_length:]
                     batch_dev_targets = batch_dev_targets[:, burn_in_length:]
                 else:
                     model_input = batch_dev_chunks
+                    hidden = None
 
-                # Detach hidden state for next batch
-                hidden = tuple(h.detach() for h in hidden)
-
-                batch_dev_targets = batch_dev_targets.view(-1)
-
-                y_output, hidden_output = language_model(model_input)
+                batch_dev_targets = batch_dev_targets.reshape(-1)
+                y_output, hidden = language_model(model_input, hidden)
 
                 y_output = y_output.view(-1, vocab_index.__len__() - 1)
 
@@ -472,6 +465,7 @@ def train_lm(args, train_text, dev_text, vocab_index):
 
                 dev_total_loss += dev_loss.item()
 
+            n_train_batches = (len(train_chunks) + batch_size - 1) // batch_size
             n_test_batches = (len(dev_chunks) + batch_size - 1) // batch_size
 
             print(f"Epoch : {epoch + 1}")
