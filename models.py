@@ -124,10 +124,10 @@ def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, de
     n_samples = len(data)
     n_test_samples = len(dev_cons_exs) + len(dev_vowel_exs)
     epochs = 10
-    batch_size = 1
+    batch_size = 2
     unique_charactor_amount = vocab_index.__len__()
 
-    rnn_classification_model = RNNClassifier(input_size=20, unique_charactor_amount=unique_charactor_amount,
+    rnn_classification_model = RNNClassifier(input_size=25, unique_charactor_amount=unique_charactor_amount,
                                              hidden_size=32,hidden_layer1=16, vocab_index=vocab_index, device=str(device))
 
     loss_function = nn.CrossEntropyLoss().to(device)
@@ -264,34 +264,36 @@ class UniformLanguageModel(LanguageModel):
 
 
 class RNNLanguageModel(LanguageModel, nn.Module):
-    def __init__(self, model_emb, model_dec, vocab_index, device='cpu'):
+    def __init__(self, model_emb, model_dec, vocab_index, num_layers=1, dropout_value=0.5, device='cpu'):
         super(RNNLanguageModel, self).__init__()
         self.model_emb = model_emb # embedding dimension
         self.model_dec = model_dec # hidden layer size
         self.vocab_index = vocab_index # vocab index
         self.device = device
 
-        self.vocab_size = vocab_index.__len__()
+        self.num_layers = num_layers
 
+        self.vocab_size = vocab_index.__len__()
 
         self.embedding = nn.Embedding(num_embeddings=self.vocab_size + 1, embedding_dim=model_emb)
 
         self.lstm = nn.LSTM(input_size=model_emb,
                             hidden_size=model_dec,
-                            num_layers=1,
+                            num_layers=num_layers,
+                            dropout= dropout_value if num_layers > 1 else 0,
                             batch_first=True)
 
         self.linear = nn.Linear(model_dec, self.vocab_size - 1)
 
-        self.dropout = nn.Dropout(0.5)
+        self.dropout = nn.Dropout(dropout_value)
 
         self.softmax = nn.LogSoftmax(dim=-1)
 
         self.to(device)
 
     def init_hidden(self, batch_size=1):
-        return (torch.zeros(1, batch_size, self.model_dec, device=self.device),
-                torch.zeros(1, batch_size, self.model_dec, device=self.device))
+        return (torch.zeros(self.num_layers, batch_size, self.model_dec, device=self.device),
+                torch.zeros(self.num_layers, batch_size, self.model_dec, device=self.device))
 
     def forward(self, x, hidden=None):
         if hidden is None:
@@ -390,12 +392,15 @@ def train_lm(args, train_text, dev_text, vocab_index):
     :return: an RNNLanguageModel instance trained on the given data
     """
 
-    chunk_size = 10
+    chunk_size = 20
     overlap_size = 5
     learning_rate = 0.005
-    epochs = 5
+    epochs = 10
     batch_size = 8
     burn_in_length = 5
+    lstm_layer_count = 1
+    embedding_size = 16
+    hidden_layers = 32
 
     vocab_index.add_and_get_index("sos")
 
@@ -409,7 +414,7 @@ def train_lm(args, train_text, dev_text, vocab_index):
     dev_chunks = torch.from_numpy(chunked_dev_text).long().to(device)
     dev_targets = torch.from_numpy(target_test).long().to(device)
 
-    language_model = RNNLanguageModel(model_emb=16, model_dec=32, vocab_index=vocab_index, device=str(device))
+    language_model = RNNLanguageModel(model_emb=embedding_size, model_dec=hidden_layers, vocab_index=vocab_index, num_layers=lstm_layer_count, device=str(device))
     loss_function = nn.NLLLoss().to(device)  # Negative log likelihood
     optimizer = torch.optim.Adam(language_model.parameters(), lr=learning_rate)
 
