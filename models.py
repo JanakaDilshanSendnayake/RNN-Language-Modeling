@@ -119,6 +119,7 @@ def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, de
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     data = raw_string_to_indices(train_cons_exs, train_vowel_exs, vocab_index)
+    test_data = raw_string_to_indices(dev_cons_exs, dev_vowel_exs, vocab_index)
 
     n_samples = len(data)
     n_test_samples = len(dev_cons_exs) + len(dev_vowel_exs)
@@ -166,6 +167,25 @@ def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, de
 
         # Evaluation phase
         rnn_classification_model.eval()
+        total_test_loss = 0
+
+        with torch.no_grad():
+            for i in range(0, n_test_samples, batch_size):
+                batch_test_data = test_data[i:min(i + batch_size, n_test_samples)]
+
+                batch_test_index_data = torch.LongTensor([x[3] for x in batch_test_data]).to(device)
+                batch_test_label = torch.LongTensor([x[1] for x in batch_test_data]).to(device)
+
+                y = rnn_classification_model(batch_test_index_data)
+
+                test_loss = loss_function(y, batch_test_label)
+
+                total_test_loss += test_loss.item()
+
+            n_test_batches = (n_test_samples+ batch_size - 1) // batch_size
+            avg_test_loss = total_test_loss /  n_test_batches
+
+
         with torch.no_grad():
             correct_train = 0
             for index in train_cons_exs:
@@ -191,6 +211,7 @@ def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, de
 
         print(f'Epoch {epoch + 1}:')
         print(f'Training Loss: {avg_loss:.4f}')
+        print(f'Test Loss: {avg_test_loss:.4f}')
         print(f'Training Accuracy: {correct_train / n_samples:.3f}')
         print(f'Test Accuracy: {correct_test / n_test_samples:.3f}')
 
