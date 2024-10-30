@@ -124,7 +124,7 @@ def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, de
     n_samples = len(data)
     n_test_samples = len(dev_cons_exs) + len(dev_vowel_exs)
     epochs = 10
-    batch_size = 2
+    batch_size = 1
     unique_charactor_amount = vocab_index.__len__()
 
     rnn_classification_model = RNNClassifier(input_size=20, unique_charactor_amount=unique_charactor_amount,
@@ -177,6 +177,10 @@ def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, de
                 batch_test_label = torch.LongTensor([x[1] for x in batch_test_data]).to(device)
 
                 y = rnn_classification_model(batch_test_index_data)
+
+                if batch_size == 1:
+                    # Add batch dimension
+                    y = y.unsqueeze(0)
 
                 test_loss = loss_function(y, batch_test_label)
 
