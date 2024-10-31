@@ -124,11 +124,11 @@ def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, de
     n_samples = len(data)
     n_test_samples = len(dev_cons_exs) + len(dev_vowel_exs)
     epochs = 10
-    batch_size = 2
+    batch_size = 4
     unique_charactor_amount = vocab_index.__len__()
 
-    rnn_classification_model = RNNClassifier(input_size=25, unique_charactor_amount=unique_charactor_amount,
-                                             hidden_size=32,hidden_layer1=16, vocab_index=vocab_index, device=str(device))
+    rnn_classification_model = RNNClassifier(input_size=20, unique_charactor_amount=unique_charactor_amount,
+                                             hidden_size=40,hidden_layer1=16, vocab_index=vocab_index, device=str(device))
 
     loss_function = nn.CrossEntropyLoss().to(device)
 
@@ -138,6 +138,7 @@ def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, de
     for epoch in range(epochs):
         rnn_classification_model.train()
         total_loss = 0
+        train_correct = 0
         random.shuffle(data)
 
         for i in range(0, n_samples, batch_size):
@@ -158,16 +159,22 @@ def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, de
             loss = loss_function(y, batch_label)
             total_loss += loss.item()
 
+            _, train_predicted = torch.max(y.data, 1)
+
+            train_correct += (train_predicted == batch_label).sum().item()
+
             loss.backward()
             optimizer.step()
 
         # Calculate average loss properly accounting for possibly incomplete final batch
         n_batches = (n_samples + batch_size - 1) // batch_size
         avg_loss = total_loss / n_batches
+        train_accuracy = train_correct / n_samples
 
         # Evaluation phase
         rnn_classification_model.eval()
         total_test_loss = 0
+        test_correct = 0
 
         with torch.no_grad():
             for i in range(0, n_test_samples, batch_size):
@@ -186,38 +193,18 @@ def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, de
 
                 total_test_loss += test_loss.item()
 
+                _, test_predicted = torch.max(y.data, 1)
+                test_correct += (test_predicted == batch_test_label).sum().item()
+
             n_test_batches = (n_test_samples+ batch_size - 1) // batch_size
             avg_test_loss = total_test_loss /  n_test_batches
-
-
-        with torch.no_grad():
-            correct_train = 0
-            for index in train_cons_exs:
-                predicted_val = rnn_classification_model.predict(index)
-                if predicted_val == 0:
-                    correct_train += 1
-
-            for index in train_vowel_exs:
-                predicted_val = rnn_classification_model.predict(index)
-                if predicted_val == 1:
-                    correct_train += 1
-
-            correct_test = 0
-            for index in dev_cons_exs:
-                predicted_val = rnn_classification_model.predict(index)
-                if predicted_val == 0:
-                    correct_test += 1
-
-            for index in dev_vowel_exs:
-                predicted_val = rnn_classification_model.predict(index)
-                if predicted_val == 1:
-                    correct_test += 1
+            test_accuracy = test_correct / n_test_samples
 
         print(f'Epoch {epoch + 1}:')
         print(f'Training Loss: {avg_loss:.4f}')
         print(f'Test Loss: {avg_test_loss:.4f}')
-        print(f'Training Accuracy: {correct_train / n_samples:.3f}')
-        print(f'Test Accuracy: {correct_test / n_test_samples:.3f}')
+        print(f'Training Accuracy: {train_accuracy:.3f}')
+        print(f'Test Accuracy: {test_accuracy :.3f}')
 
     return rnn_classification_model
 
@@ -400,7 +387,7 @@ def train_lm(args, train_text, dev_text, vocab_index):
     burn_in_length = 5
     lstm_layer_count = 1
     embedding_size = 16
-    hidden_layers = 32
+    hidden_layers = 40
 
     vocab_index.add_and_get_index("sos")
 
