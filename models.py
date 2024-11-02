@@ -6,6 +6,8 @@ import torch
 import torch.nn as nn
 import random
 from matplotlib import pyplot as plt
+import os
+
 
 
 #####################
@@ -246,6 +248,12 @@ def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, de
 
     plt.show(block=True)
 
+
+    #Saving the trained model
+    os.makedirs('trained_models', exist_ok=True)
+    model_save_path = os.path.join('trained_models', 'rnn_binary_classifier.pth')
+    torch.save(rnn_classification_model.state_dict(), model_save_path)
+    print(f'Model saved to {model_save_path}')
 
     return rnn_classification_model
 
@@ -550,3 +558,125 @@ def train_lm(args, train_text, dev_text, vocab_index):
     plt.show(block=True)
 
     return language_model
+
+
+#################
+# VISUALIZATION #
+#################
+
+import matplotlib.pyplot as plt
+from utils import Indexer
+
+
+def run_experiment(max_context_length=20):
+
+    DEV_CONS_PATH = r"data/dev-consonant-examples.txt"
+    DEV_VOWEL_PATH = r"data/dev-vowel-examples.txt"
+    MODEL_PATH = r"trained_models/rnn_binary_classifier.pth"
+
+    def load_and_pad_examples(filename, context_length, padding_char=' '):
+
+        examples = []
+        with open(filename, 'r') as f:
+            for line in f:
+                example = line.strip()
+                # Pad or trim example to the context length
+                padded_example = example[:context_length].ljust(context_length, padding_char)
+                examples.append(padded_example)
+        return examples
+
+    def load_rnn_classifier(model_class, model_path, vocab_index):
+
+        input_size = 20
+        unique_charactor_amount =  vocab_index.__len__()
+        hidden_size = 40
+        hidden_layer1 = 16
+        vocab_index = vocab_index
+        device = str(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+
+        try:
+            model = model_class(input_size=20, unique_charactor_amount=unique_charactor_amount,
+                                             hidden_size=40,hidden_layer1=16, vocab_index=vocab_index, device=str(device))
+            model.load_state_dict(torch.load(model_path))
+            model.eval()
+            print("Model loaded successfully.")
+            return model
+        except FileNotFoundError:
+            print(f"Error: The model file '{model_path}' was not found.")
+            raise
+
+    def evaluate_model_on_context_lengths(model, consonant_examples, vowel_examples):
+
+        accuracy_by_length = {}
+
+        for length in range(1, max_context_length + 1):
+            trimmed_consonants = [ex[:length] for ex in consonant_examples]
+            trimmed_vowels = [ex[:length] for ex in vowel_examples]
+
+            # Evaluate model
+            correct_predictions = sum(1 for ex in trimmed_consonants if model.predict(ex) == 0)
+            correct_predictions += sum(1 for ex in trimmed_vowels if model.predict(ex) == 1)
+            total = len(trimmed_consonants) + len(trimmed_vowels)
+            accuracy = correct_predictions / total
+
+            accuracy_by_length[length] = accuracy
+            print(f"Context length {length}: Accuracy = {accuracy:.2f}")
+
+        return accuracy_by_length
+
+    def visualize_accuracy_trend(accuracy_data, title):
+
+        lengths = list(accuracy_data.keys())
+        accuracies = list(accuracy_data.values())
+
+        plt.figure(figsize=(10, 6))
+        plt.plot(lengths, accuracies, marker='o')
+        plt.title(title)
+        plt.xlabel("Context Length")
+        plt.ylabel("Accuracy")
+        plt.grid(True)
+        plt.show()
+
+    # Vocabulary and indexer
+    vocab = [chr(ord('a') + i) for i in range(26)] + [' ']
+    vocab_index = Indexer()
+    for char in vocab:
+        vocab_index.add_and_get_index(char)
+
+    # Load testing data
+    dev_cons_exs = load_and_pad_examples(DEV_CONS_PATH, context_length=max_context_length)
+    dev_vowel_exs = load_and_pad_examples(DEV_VOWEL_PATH, context_length=max_context_length)
+
+    # Load the trained model
+    try:
+        rnn_model = load_rnn_classifier(RNNClassifier, MODEL_PATH, vocab_index)
+        print("Model loaded successfully.")
+    except FileNotFoundError:
+        print(f"Error: The model file '{MODEL_PATH}' was not found.")
+        return
+    except Exception as e:
+        print(f"An error occurred while loading the model: {e}")
+        return
+
+    # Evaluate and visualize
+
+    print("\nEvaluating RNN Classifier")
+    rnn_accuracy_data = evaluate_model_on_context_lengths(rnn_model, dev_cons_exs, dev_vowel_exs)
+    visualize_accuracy_trend(rnn_accuracy_data, "RNN Classifier Accuracy vs. Context Length")
+
+
+import argparse
+
+def main():
+    # Set up argument parser
+    parser = argparse.ArgumentParser(description="Run the consonant vowel classification experiment for different context lengt.")
+    parser.add_argument("--max_context_length", type=int, default=20, help="Maximum context length for evaluation.")
+
+    # Parse arguments
+    args = parser.parse_args()
+
+    # Run the experiment with parsed arguments
+    run_experiment(args.max_context_length)
+
+if __name__ == "__main__":
+    main()
