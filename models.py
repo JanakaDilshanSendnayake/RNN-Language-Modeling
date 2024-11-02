@@ -7,7 +7,7 @@ import torch.nn as nn
 import random
 from matplotlib import pyplot as plt
 import os
-
+from utils import Indexer
 
 
 #####################
@@ -431,7 +431,7 @@ def train_lm(args, train_text, dev_text, vocab_index):
     chunk_size = 20
     overlap_size = 5
     learning_rate = 0.002
-    epochs = 20
+    epochs = 10
     batch_size = 8
     burn_in_length = 5
     lstm_layer_count = 1
@@ -506,7 +506,7 @@ def train_lm(args, train_text, dev_text, vocab_index):
             loss.backward()
             optimizer.step()
 
-            print(f"Epoch : {epoch + 1}", [torch.argmax(x).cpu().item() for x in y_output], batch_targets)
+            # print(f"Epoch : {epoch + 1}", [torch.argmax(x).cpu().item() for x in y_output], batch_targets)
 
         language_model.eval()
         with torch.no_grad():
@@ -563,10 +563,6 @@ def train_lm(args, train_text, dev_text, vocab_index):
 #################
 # VISUALIZATION #
 #################
-
-import matplotlib.pyplot as plt
-from utils import Indexer
-
 
 def run_experiment(max_context_length=20):
 
