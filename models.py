@@ -5,6 +5,7 @@ import collections
 import torch
 import torch.nn as nn
 import random
+from matplotlib import pyplot as plt
 
 
 #####################
@@ -46,7 +47,7 @@ class RNNClassifier(ConsonantVowelClassifier, nn.Module):
                             num_layers=1,               # Number of LSTM layers
                             batch_first=True,
                             )           # Input shape will be [batch_size, seq_length, input_size]
-        self.dropout = nn.Dropout(p=0.3)
+        self.dropout = nn.Dropout(p=0.5)
         self.relu = nn.ReLU()
         self.linear = nn.Linear(hidden_size, hidden_layer1)
         self.linear2 = nn.Linear(hidden_layer1, 2)
@@ -124,15 +125,25 @@ def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, de
     n_samples = len(data)
     n_test_samples = len(dev_cons_exs) + len(dev_vowel_exs)
     epochs = 10
-    batch_size = 4
+    batch_size = 2
+    input_dim_size = 20
+    hidden_size = 40
+    hidden_layer1 = 64
+
+    train_los_ar = []
+    train_accuracy_ar = []
+    dev_loss_ar = []
+    dev_accuracy_ar = []
+    epoch_array = np.array([x for x in range(1, epochs + 1)])
+
     unique_charactor_amount = vocab_index.__len__()
 
-    rnn_classification_model = RNNClassifier(input_size=20, unique_charactor_amount=unique_charactor_amount,
-                                             hidden_size=40,hidden_layer1=16, vocab_index=vocab_index, device=str(device))
+    rnn_classification_model = RNNClassifier(input_size=input_dim_size, unique_charactor_amount=unique_charactor_amount,
+                                             hidden_size=hidden_size,hidden_layer1=hidden_layer1, vocab_index=vocab_index, device=str(device))
 
     loss_function = nn.CrossEntropyLoss().to(device)
 
-    optimizer = torch.optim.Adam(rnn_classification_model.parameters(), lr=0.001)
+    optimizer = torch.optim.Adam(rnn_classification_model.parameters(), lr=0.001, weight_decay=0.0001)
 
 
     for epoch in range(epochs):
@@ -171,6 +182,9 @@ def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, de
         avg_loss = total_loss / n_batches
         train_accuracy = train_correct / n_samples
 
+        train_los_ar.append(avg_loss)
+        train_accuracy_ar.append(train_accuracy)
+
         # Evaluation phase
         rnn_classification_model.eval()
         total_test_loss = 0
@@ -200,11 +214,38 @@ def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, de
             avg_test_loss = total_test_loss /  n_test_batches
             test_accuracy = test_correct / n_test_samples
 
+            dev_loss_ar.append(avg_test_loss)
+            dev_accuracy_ar.append(test_accuracy)
+
         print(f'Epoch {epoch + 1}:')
         print(f'Training Loss: {avg_loss:.4f}')
         print(f'Test Loss: {avg_test_loss:.4f}')
         print(f'Training Accuracy: {train_accuracy:.3f}')
         print(f'Test Accuracy: {test_accuracy :.3f}')
+
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
+    fig.tight_layout(pad=3.0)
+
+    # Plot Loss curves in the first subplot
+    ax1.plot(epoch_array, train_los_ar, label='Train Loss')
+    ax1.plot(epoch_array, dev_loss_ar, label='Dev Loss')
+    ax1.set_xlabel('Epoch')
+    ax1.set_ylabel('Loss')
+    ax1.legend()
+    ax1.grid(True)
+    ax1.set_title('Training and Development Loss')
+
+    # Plot Accuracy curves in the second subplot
+    ax2.plot(epoch_array, train_accuracy_ar, label='Train Accuracy')
+    ax2.plot(epoch_array, dev_accuracy_ar, label='Dev Accuracy')
+    ax2.set_xlabel('Epoch')
+    ax2.set_ylabel('Accuracy')
+    ax2.legend()
+    ax2.grid(True)
+    ax2.set_title('Training and Development Accuracy')
+
+    plt.show(block=True)
+
 
     return rnn_classification_model
 
@@ -381,8 +422,8 @@ def train_lm(args, train_text, dev_text, vocab_index):
 
     chunk_size = 20
     overlap_size = 5
-    learning_rate = 0.005
-    epochs = 10
+    learning_rate = 0.002
+    epochs = 20
     batch_size = 8
     burn_in_length = 5
     lstm_layer_count = 1
@@ -395,6 +436,10 @@ def train_lm(args, train_text, dev_text, vocab_index):
 
     chunked_train_text , target_train= chunk_required_data(train_text, chunk_size, vocab_index, overlap_size)
     chunked_dev_text, target_test = chunk_required_data(dev_text, chunk_size, vocab_index, overlap_size)
+
+    train_los_ar = []
+    dev_loss_ar = []
+    epoch_array = np.array([x for x in range(1, epochs + 1)])
 
     train_chunks = torch.from_numpy(chunked_train_text).long().to(device)
     train_targets = torch.from_numpy(target_train).long().to(device)
@@ -482,11 +527,26 @@ def train_lm(args, train_text, dev_text, vocab_index):
 
                 dev_total_loss += dev_loss.item()
 
+
             n_train_batches = (len(train_chunks) + batch_size - 1) // batch_size
             n_test_batches = (len(dev_chunks) + batch_size - 1) // batch_size
 
+            train_avg_loss = total_loss / n_train_batches
+            train_los_ar.append(train_avg_loss)
+
+            dev_avg_loss = dev_total_loss / n_test_batches
+            dev_loss_ar.append(dev_avg_loss)
+
             print(f"Epoch : {epoch + 1}")
-            print(f"Train Average Loss : {total_loss / n_train_batches}")
-            print(f"Test Average Loss : {dev_loss / n_test_batches }")
+            print(f"Train Average Loss : {train_avg_loss}")
+            print(f"Test Average Loss : {dev_avg_loss}")
+
+
+    plt.plot(epoch_array, train_los_ar, label='Train Loss')
+    plt.plot(epoch_array, dev_loss_ar, label='Dev Loss')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.legend()
+    plt.show(block=True)
 
     return language_model
