@@ -252,7 +252,7 @@ def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, de
     #Saving the trained model
     os.makedirs('trained_models', exist_ok=True)
     model_save_path = os.path.join('trained_models', 'rnn_binary_classifier.pth')
-    torch.save(rnn_classification_model.state_dict(), model_save_path)
+    torch.save(rnn_classification_model, model_save_path)
     print(f'Model saved to {model_save_path}')
 
     return rnn_classification_model
@@ -585,19 +585,10 @@ def run_experiment(max_context_length=20):
                 examples.append(padded_example)
         return examples
 
-    def load_rnn_classifier(model_class, model_path, vocab_index):
-
-        input_size = 20
-        unique_charactor_amount =  vocab_index.__len__()
-        hidden_size = 40
-        hidden_layer1 = 16
-        vocab_index = vocab_index
-        device = str(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+    def load_rnn_classifier(model_path):
 
         try:
-            model = model_class(input_size=20, unique_charactor_amount=unique_charactor_amount,
-                                             hidden_size=40,hidden_layer1=16, vocab_index=vocab_index, device=str(device))
-            model.load_state_dict(torch.load(model_path))
+            model = torch.load(model_path)
             model.eval()
             print("Model loaded successfully.")
             return model
@@ -649,7 +640,7 @@ def run_experiment(max_context_length=20):
 
     # Load the trained model
     try:
-        rnn_model = load_rnn_classifier(RNNClassifier, MODEL_PATH, vocab_index)
+        rnn_model = load_rnn_classifier(MODEL_PATH)
         print("Model loaded successfully.")
     except FileNotFoundError:
         print(f"Error: The model file '{MODEL_PATH}' was not found.")
