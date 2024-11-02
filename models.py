@@ -8,6 +8,8 @@ import random
 from matplotlib import pyplot as plt
 import os
 from utils import Indexer
+import argparse
+
 
 
 #####################
@@ -646,13 +648,10 @@ def run_experiment(max_context_length=20):
         return
 
     # Evaluate and visualize
-
     print("\nEvaluating RNN Classifier")
     rnn_accuracy_data = evaluate_model_on_context_lengths(rnn_model, dev_cons_exs, dev_vowel_exs)
     visualize_accuracy_trend(rnn_accuracy_data, "RNN Classifier Accuracy vs. Context Length")
 
-
-import argparse
 
 def main():
     # Set up argument parser
