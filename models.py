@@ -11,7 +11,6 @@ from utils import Indexer
 import argparse
 
 
-
 #####################
 # MODELS FOR PART 1 #
 #####################
@@ -30,6 +29,7 @@ class FrequencyBasedClassifier(ConsonantVowelClassifier):
     Classifier based on the last letter before the space. If it has occurred with more consonants than vowels,
     classify as consonant, otherwise as vowel.
     """
+
     def __init__(self, consonant_counts, vowel_counts):
         self.consonant_counts = consonant_counts
         self.vowel_counts = vowel_counts
@@ -43,14 +43,14 @@ class FrequencyBasedClassifier(ConsonantVowelClassifier):
 
 
 class RNNClassifier(ConsonantVowelClassifier, nn.Module):
-    def __init__(self, input_size, unique_charactor_amount, hidden_size, hidden_layer1,  vocab_index, device='cpu'):
+    def __init__(self, input_size, unique_charactor_amount, hidden_size, hidden_layer1, vocab_index, device='cpu'):
         super(RNNClassifier, self).__init__()
         self.charactor_embedding = nn.Embedding(num_embeddings=unique_charactor_amount, embedding_dim=input_size)
-        self.lstm = nn.LSTM(input_size=input_size,      # embedding dimension
-                            hidden_size=hidden_size,             # Number of LSTM units
-                            num_layers=1,               # Number of LSTM layers
+        self.lstm = nn.LSTM(input_size=input_size,  # embedding dimension
+                            hidden_size=hidden_size,  # Number of LSTM units
+                            num_layers=1,  # Number of LSTM layers
                             batch_first=True,
-                            )           # Input shape will be [batch_size, seq_length, input_size]
+                            )  # Input shape will be [batch_size, seq_length, input_size]
         self.dropout = nn.Dropout(p=0.5)
         self.relu = nn.ReLU()
         self.linear = nn.Linear(hidden_size, hidden_layer1)
@@ -75,17 +75,19 @@ class RNNClassifier(ConsonantVowelClassifier, nn.Module):
 
         val = self.relu(val)
 
-        val =  self.dropout(val)
+        val = self.dropout(val)
 
-        predicted_val =  self.linear2(val)
+        predicted_val = self.linear2(val)
 
         return predicted_val
 
     def predict(self, context):
-        index_string = torch.tensor([self.vocab_index.index_of(x) for x in context], dtype=torch.long, device=self.device)
+        index_string = torch.tensor([self.vocab_index.index_of(x) for x in context], dtype=torch.long,
+                                    device=self.device)
         predicted = self.forward(index_string)
         predicted_class = torch.argmax(predicted, dim=-1)  # Add dimension for argmax
         return predicted_class
+
 
 def train_frequency_based_classifier(cons_exs, vowel_exs):
     consonant_counts = collections.Counter()
@@ -98,16 +100,16 @@ def train_frequency_based_classifier(cons_exs, vowel_exs):
 
 
 def raw_string_to_indices(train_cons, train_vowel, vocab_index):
-   cons_data = [[train_cons[index], 0 , index] for index in range(0, len(train_cons))]
-   vowels_data = [[train_vowel[index], 1 , len(train_cons) + index] for index in range(0, len(train_vowel))]
+    cons_data = [[train_cons[index], 0, index] for index in range(0, len(train_cons))]
+    vowels_data = [[train_vowel[index], 1, len(train_cons) + index] for index in range(0, len(train_vowel))]
 
-   all_data = cons_data + vowels_data
+    all_data = cons_data + vowels_data
 
-   for index in all_data:
-       index_string = [vocab_index.index_of(x)for x in index[0]]
-       index.append(index_string)
+    for index in all_data:
+        index_string = [vocab_index.index_of(x) for x in index[0]]
+        index.append(index_string)
 
-   return all_data
+    return all_data
 
 
 def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, dev_vowel_exs, vocab_index):
@@ -143,12 +145,12 @@ def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, de
     unique_charactor_amount = vocab_index.__len__()
 
     rnn_classification_model = RNNClassifier(input_size=input_dim_size, unique_charactor_amount=unique_charactor_amount,
-                                             hidden_size=hidden_size,hidden_layer1=hidden_layer1, vocab_index=vocab_index, device=str(device))
+                                             hidden_size=hidden_size, hidden_layer1=hidden_layer1,
+                                             vocab_index=vocab_index, device=str(device))
 
     loss_function = nn.CrossEntropyLoss().to(device)
 
     optimizer = torch.optim.Adam(rnn_classification_model.parameters(), lr=0.001, weight_decay=0.0001)
-
 
     for epoch in range(epochs):
         rnn_classification_model.train()
@@ -169,7 +171,6 @@ def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, de
             if batch_size == 1:
                 # Add batch dimension
                 y = y.unsqueeze(0)
-
 
             loss = loss_function(y, batch_label)
             total_loss += loss.item()
@@ -214,8 +215,8 @@ def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, de
                 _, test_predicted = torch.max(y.data, 1)
                 test_correct += (test_predicted == batch_test_label).sum().item()
 
-            n_test_batches = (n_test_samples+ batch_size - 1) // batch_size
-            avg_test_loss = total_test_loss /  n_test_batches
+            n_test_batches = (n_test_samples + batch_size - 1) // batch_size
+            avg_test_loss = total_test_loss / n_test_batches
             test_accuracy = test_correct / n_test_samples
 
             dev_loss_ar.append(avg_test_loss)
@@ -250,7 +251,6 @@ def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, de
 
     plt.savefig('classifier_accuracy_loss.png')
 
-
     #Saving the trained model
     os.makedirs('trained_models', exist_ok=True)
     model_save_path = os.path.join('trained_models', 'rnn_binary_classifier.pth')
@@ -258,6 +258,7 @@ def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, de
     print(f'Model saved to {model_save_path}')
 
     return rnn_classification_model
+
 
 #####################
 # MODELS FOR PART 2 #
@@ -277,7 +278,6 @@ class LanguageModel(object):
         """
         raise Exception("Only implemented in subclasses")
 
-
     def get_log_prob_sequence(self, next_chars, context):
         """
         Scores a bunch of characters following context. That is, returns
@@ -295,18 +295,18 @@ class UniformLanguageModel(LanguageModel):
         self.voc_size = voc_size
 
     def get_log_prob_single(self, next_char, context):
-        return np.log(1.0/self.voc_size)
+        return np.log(1.0 / self.voc_size)
 
     def get_log_prob_sequence(self, next_chars, context):
-        return np.log(1.0/self.voc_size) * len(next_chars)
+        return np.log(1.0 / self.voc_size) * len(next_chars)
 
 
 class RNNLanguageModel(LanguageModel, nn.Module):
     def __init__(self, model_emb, model_dec, vocab_index, num_layers=1, dropout_value=0.5, device='cpu'):
         super(RNNLanguageModel, self).__init__()
-        self.model_emb = model_emb # embedding dimension
-        self.model_dec = model_dec # hidden layer size
-        self.vocab_index = vocab_index # vocab index
+        self.model_emb = model_emb  # embedding dimension
+        self.model_dec = model_dec  # hidden layer size
+        self.vocab_index = vocab_index  # vocab index
         self.device = device
 
         self.num_layers = num_layers
@@ -318,7 +318,7 @@ class RNNLanguageModel(LanguageModel, nn.Module):
         self.lstm = nn.LSTM(input_size=model_emb,
                             hidden_size=model_dec,
                             num_layers=num_layers,
-                            dropout= dropout_value if num_layers > 1 else 0,
+                            dropout=dropout_value if num_layers > 1 else 0,
                             batch_first=True)
 
         self.linear = nn.Linear(model_dec, self.vocab_size - 1)
@@ -360,11 +360,10 @@ class RNNLanguageModel(LanguageModel, nn.Module):
 
         context_text = torch.tensor([context_indices], dtype=torch.long).to(self.device)
 
-
         print(context_text.shape)
 
         with torch.no_grad():
-            y_output , hidden_output = self.forward(context_text, hidden)
+            y_output, hidden_output = self.forward(context_text, hidden)
 
             last_charactor_predicted = y_output[0, -1]
 
@@ -376,15 +375,15 @@ class RNNLanguageModel(LanguageModel, nn.Module):
 
             log_probability = last_charactor_predicted[next_charactor_actual_index]
 
-            print("predicted : " , self.vocab_index.get_object(torch.argmax(last_charactor_predicted).cpu().item()), "actual",  next_char)
+            print("predicted : ", self.vocab_index.get_object(torch.argmax(last_charactor_predicted).cpu().item()),
+                  "actual", next_char)
 
             return log_probability, hidden_output
-
 
     def get_log_prob_sequence(self, next_chars, context):
         total_log_probability = 0
 
-        current_context =  context
+        current_context = context
 
         hidden = None
 
@@ -404,7 +403,7 @@ def chunk_required_data(text, chunk_size, vocab_index, overlap_size=1):
 
     for index in range(0, len(text) - chunk_size, overlap_size):
         chunks_extracted.append(text[index:index + chunk_size - 1])
-        target_extracted.append(text[index :index + chunk_size])
+        target_extracted.append(text[index:index + chunk_size])
 
     chunks_extracted, target_extracted = extract_required_indices(chunks_extracted, target_extracted, vocab_index)
 
@@ -444,7 +443,7 @@ def train_lm(args, train_text, dev_text, vocab_index):
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    chunked_train_text , target_train= chunk_required_data(train_text, chunk_size, vocab_index, overlap_size)
+    chunked_train_text, target_train = chunk_required_data(train_text, chunk_size, vocab_index, overlap_size)
     chunked_dev_text, target_test = chunk_required_data(dev_text, chunk_size, vocab_index, overlap_size)
 
     train_los_ar = []
@@ -456,7 +455,8 @@ def train_lm(args, train_text, dev_text, vocab_index):
     dev_chunks = torch.from_numpy(chunked_dev_text).long().to(device)
     dev_targets = torch.from_numpy(target_test).long().to(device)
 
-    language_model = RNNLanguageModel(model_emb=embedding_size, model_dec=hidden_layers, vocab_index=vocab_index, num_layers=lstm_layer_count, device=str(device))
+    language_model = RNNLanguageModel(model_emb=embedding_size, model_dec=hidden_layers, vocab_index=vocab_index,
+                                      num_layers=lstm_layer_count, device=str(device))
     loss_function = nn.NLLLoss().to(device)  # Negative log likelihood
     optimizer = torch.optim.Adam(language_model.parameters(), lr=learning_rate)
 
@@ -465,7 +465,6 @@ def train_lm(args, train_text, dev_text, vocab_index):
     #
     # # for index in range(0, len(chunked_dev_text)):
     # #     print(chunked_dev_text[index],  target_test[index])
-
 
     print("Train text: ", len(chunked_train_text))
     print("Dev text: ", len(chunked_dev_text))
@@ -537,7 +536,6 @@ def train_lm(args, train_text, dev_text, vocab_index):
 
                 dev_total_loss += dev_loss.item()
 
-
             n_train_batches = (len(train_chunks) + batch_size - 1) // batch_size
             n_test_batches = (len(dev_chunks) + batch_size - 1) // batch_size
 
@@ -550,7 +548,6 @@ def train_lm(args, train_text, dev_text, vocab_index):
             print(f"Epoch : {epoch + 1}")
             print(f"Train Average Loss : {train_avg_loss}")
             print(f"Test Average Loss : {dev_avg_loss}")
-
 
     plt.plot(epoch_array, train_los_ar, label='Train Loss')
     plt.plot(epoch_array, dev_loss_ar, label='Dev Loss')
@@ -567,24 +564,22 @@ def train_lm(args, train_text, dev_text, vocab_index):
 #################
 
 def run_experiment(max_context_length=20):
-
     DEV_CONS_PATH = r"data/dev-consonant-examples.txt"
     DEV_VOWEL_PATH = r"data/dev-vowel-examples.txt"
     MODEL_PATH = r"trained_models/rnn_binary_classifier.pth"
 
-    def load_and_pad_examples(filename, context_length, padding_char=' '):
+    if max_context_length not in range(2,21):
+        print(f"Max context length should be in range [2, 20]")
+        return
 
+    def load_examples(filename, context_length):
         examples = []
         with open(filename, 'r') as f:
             for line in f:
-                example = line.strip()
-                # Pad or trim example to the context length
-                padded_example = example[:context_length].ljust(context_length, padding_char)
-                examples.append(padded_example)
+                examples.append(line)
         return examples
 
     def load_rnn_classifier(model_path):
-
         try:
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             model = torch.load(model_path, map_location=device)
@@ -598,12 +593,24 @@ def run_experiment(max_context_length=20):
     def evaluate_model_on_context_lengths(model, consonant_examples, vowel_examples):
 
         accuracy_by_length = {}
+        vowels = 'aeiou'
 
         for length in range(1, max_context_length + 1):
-            trimmed_consonants = [ex[:length] for ex in consonant_examples]
-            trimmed_vowels = [ex[:length] for ex in vowel_examples]
+            if length == 20:
+                trimmed_consonants = [ex[:length ] for ex in consonant_examples]
+                trimmed_vowels = [ex[:length ] for ex in vowel_examples]
+            else:
+                trimmed_text = [ex[:length + 1] for ex in consonant_examples + vowel_examples]
+                trimmed_vowels = []
+                trimmed_consonants = []
 
-            # Evaluate model
+                for ex in trimmed_text:
+                    if ex[-1] in vowels:
+                        trimmed_vowels.append(ex[:-1])
+                    else:
+                        trimmed_consonants.append(ex[:-1])
+
+            # model evaluation
             correct_predictions = sum(1 for ex in trimmed_consonants if model.predict(ex) == 0)
             correct_predictions += sum(1 for ex in trimmed_vowels if model.predict(ex) == 1)
             total = len(trimmed_consonants) + len(trimmed_vowels)
@@ -615,7 +622,6 @@ def run_experiment(max_context_length=20):
         return accuracy_by_length
 
     def visualize_accuracy_trend(accuracy_data, title):
-
         lengths = list(accuracy_data.keys())
         accuracies = list(accuracy_data.values())
 
@@ -634,13 +640,12 @@ def run_experiment(max_context_length=20):
         vocab_index.add_and_get_index(char)
 
     # Load testing data
-    dev_cons_exs = load_and_pad_examples(DEV_CONS_PATH, context_length=max_context_length)
-    dev_vowel_exs = load_and_pad_examples(DEV_VOWEL_PATH, context_length=max_context_length)
+    dev_cons_exs = load_examples(DEV_CONS_PATH, context_length=max_context_length)
+    dev_vowel_exs = load_examples(DEV_VOWEL_PATH, context_length=max_context_length)
 
     # Load the trained model
     try:
         rnn_model = load_rnn_classifier(MODEL_PATH)
-        print("Model loaded successfully.")
     except FileNotFoundError:
         print(f"Error: The model file '{MODEL_PATH}' was not found.")
         return
@@ -656,7 +661,8 @@ def run_experiment(max_context_length=20):
 
 def main():
     # Set up argument parser
-    parser = argparse.ArgumentParser(description="Run the consonant vowel classification experiment for different context lengt.")
+    parser = argparse.ArgumentParser(description="Run the consonant vowel classification experiment for different "
+                                                 "context length.")
     parser.add_argument("--max_context_length", type=int, default=20, help="Maximum context length for evaluation.")
 
     # Parse arguments
@@ -665,5 +671,8 @@ def main():
     # Run the experiment with parsed arguments
     run_experiment(args.max_context_length)
 
+
 if __name__ == "__main__":
     main()
+
+
