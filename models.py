@@ -248,7 +248,7 @@ def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, de
     ax2.grid(True)
     ax2.set_title('Training and Development Accuracy')
 
-    plt.show(block=True)
+    plt.savefig('classifier_accuracy_loss.png')
 
 
     #Saving the trained model
@@ -557,7 +557,7 @@ def train_lm(args, train_text, dev_text, vocab_index):
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
     plt.legend()
-    plt.show(block=True)
+    plt.savefig('language_model_loss.png')
 
     return language_model
 
