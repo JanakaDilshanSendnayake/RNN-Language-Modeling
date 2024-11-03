@@ -6,6 +6,8 @@ import torch
 import torch.nn as nn
 import random
 from matplotlib import pyplot as plt
+from torch.ao.nn.quantized.functional import leaky_relu
+
 plt.style.use('ggplot')
 import os
 from utils import Indexer
@@ -46,7 +48,7 @@ class FrequencyBasedClassifier(ConsonantVowelClassifier):
 
 
 class RNNClassifier(ConsonantVowelClassifier, nn.Module):
-    def __init__(self, input_size, unique_charactor_amount, hidden_size, hidden_layer1, vocab_index, device='cpu'):
+    def __init__(self, input_size, unique_charactor_amount, hidden_size, hidden_layer1, hidden_layer2, vocab_index, device='cpu'):
         super(RNNClassifier, self).__init__()
         self.charactor_embedding = nn.Embedding(num_embeddings=unique_charactor_amount, embedding_dim=input_size)
         self.lstm = nn.LSTM(input_size=input_size,  # embedding dimension
@@ -54,10 +56,11 @@ class RNNClassifier(ConsonantVowelClassifier, nn.Module):
                             num_layers=1,  # Number of LSTM layers
                             batch_first=True,
                             )  # Input shape will be [batch_size, seq_length, input_size]
-        self.dropout = nn.Dropout(p=0.5)
+        self.dropout = nn.Dropout(p=0.3)
         self.relu = nn.ReLU()
         self.linear = nn.Linear(hidden_size, hidden_layer1)
-        self.linear2 = nn.Linear(hidden_layer1, 2)
+        self.linear2 = nn.Linear(hidden_layer1, hidden_layer2)
+        self.linear3 = nn.Linear(hidden_layer2, 2)
         self.vocab_index = vocab_index
         self.device = device
 
@@ -80,7 +83,13 @@ class RNNClassifier(ConsonantVowelClassifier, nn.Module):
 
         val = self.dropout(val)
 
-        predicted_val = self.linear2(val)
+        val = self.linear2(val)
+
+        val = self.relu(val)
+
+        val = self.dropout(val)
+
+        predicted_val = self.linear3(val)
 
         return predicted_val
 
@@ -133,11 +142,13 @@ def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, de
 
     n_samples = len(data)
     n_test_samples = len(dev_cons_exs) + len(dev_vowel_exs)
-    epochs = 10
-    batch_size = 2
+    epochs = 15
+    batch_size = 4
     input_dim_size = 20
     hidden_size = 40
-    hidden_layer1 = 64
+    hidden_layer1 = 16
+    hidden_layer2 = 8
+    learning_rate = 0.0005
 
     train_los_ar = []
     train_accuracy_ar = []
@@ -149,11 +160,11 @@ def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, de
 
     rnn_classification_model = RNNClassifier(input_size=input_dim_size, unique_charactor_amount=unique_charactor_amount,
                                              hidden_size=hidden_size, hidden_layer1=hidden_layer1,
-                                             vocab_index=vocab_index, device=str(device))
+                                             hidden_layer2=hidden_layer2, vocab_index=vocab_index, device=str(device))
 
     loss_function = nn.CrossEntropyLoss().to(device)
 
-    optimizer = torch.optim.Adam(rnn_classification_model.parameters(), lr=0.001, weight_decay=0.0001)
+    optimizer = torch.optim.Adam(rnn_classification_model.parameters(), lr=learning_rate, weight_decay=0.0001)
 
     for epoch in range(epochs):
         rnn_classification_model.train()
