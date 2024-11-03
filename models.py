@@ -6,9 +6,12 @@ import torch
 import torch.nn as nn
 import random
 from matplotlib import pyplot as plt
+plt.style.use('ggplot')
 import os
 from utils import Indexer
 import argparse
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
 
 
 #####################
@@ -568,11 +571,11 @@ def run_experiment(max_context_length=20):
     DEV_VOWEL_PATH = r"data/dev-vowel-examples.txt"
     MODEL_PATH = r"trained_models/rnn_binary_classifier.pth"
 
-    if max_context_length not in range(2,21):
-        print(f"Max context length should be in range [2, 20]")
+    if max_context_length not in range(1,21):
+        print(f"Max context length should be in range [1, 20]")
         return
 
-    def load_examples(filename, context_length):
+    def load_examples(filename):
         examples = []
         with open(filename, 'r') as f:
             for line in f:
@@ -591,7 +594,6 @@ def run_experiment(max_context_length=20):
             raise
 
     def evaluate_model_on_context_lengths(model, consonant_examples, vowel_examples):
-
         accuracy_by_length = {}
         vowels = 'aeiou'
 
@@ -617,7 +619,7 @@ def run_experiment(max_context_length=20):
             accuracy = correct_predictions / total
 
             accuracy_by_length[length] = accuracy
-            print(f"Context length {length}: Accuracy = {accuracy:.2f}")
+            print(f"Context length {length}: Accuracy = {accuracy:.3f}")
 
         return accuracy_by_length
 
@@ -640,8 +642,8 @@ def run_experiment(max_context_length=20):
         vocab_index.add_and_get_index(char)
 
     # Load testing data
-    dev_cons_exs = load_examples(DEV_CONS_PATH, context_length=max_context_length)
-    dev_vowel_exs = load_examples(DEV_VOWEL_PATH, context_length=max_context_length)
+    dev_cons_exs = load_examples(DEV_CONS_PATH)
+    dev_vowel_exs = load_examples(DEV_VOWEL_PATH)
 
     # Load the trained model
     try:
