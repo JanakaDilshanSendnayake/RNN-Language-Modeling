@@ -584,7 +584,8 @@ def run_experiment(max_context_length=20):
     def load_rnn_classifier(model_path):
 
         try:
-            model = torch.load(model_path)
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            model = torch.load(model_path, map_location=device)
             model.eval()
             print("Model loaded successfully.")
             return model
