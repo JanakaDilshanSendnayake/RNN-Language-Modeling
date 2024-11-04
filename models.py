@@ -567,6 +567,7 @@ def train_lm(args, train_text, dev_text, vocab_index):
     plt.plot(epoch_array, dev_loss_ar, label='Dev Loss')
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
+    plt.title('Training and Development Loss of the Language model')
     plt.legend()
     plt.savefig('language_model_loss.png')
 
