@@ -7,6 +7,7 @@ import torch.nn as nn
 import random
 from matplotlib import pyplot as plt
 from torch.ao.nn.quantized.functional import leaky_relu
+from torch.nn.functional import dropout
 
 plt.style.use('ggplot')
 import os
@@ -48,7 +49,8 @@ class FrequencyBasedClassifier(ConsonantVowelClassifier):
 
 
 class RNNClassifier(ConsonantVowelClassifier, nn.Module):
-    def __init__(self, input_size, unique_charactor_amount, hidden_size, hidden_layer1, hidden_layer2, vocab_index, device='cpu'):
+    def __init__(self, input_size, unique_charactor_amount, hidden_size, hidden_layer1, hidden_layer2, vocab_index,
+                 dropout, device='cpu'):
         super(RNNClassifier, self).__init__()
 
         # Embedding layer to convert character indices to dense vectors
@@ -62,7 +64,7 @@ class RNNClassifier(ConsonantVowelClassifier, nn.Module):
                             )  # Input shape will be [batch_size, seq_length, input_size]
 
         # Dropout layer
-        self.dropout = nn.Dropout(p=0.3)
+        self.dropout = nn.Dropout(p= dropout)
 
         # Relu activation function
         self.relu = nn.ReLU()
@@ -114,10 +116,19 @@ class RNNClassifier(ConsonantVowelClassifier, nn.Module):
         return predicted_val
 
     def predict(self, context):
+        """This function predicts the class of the given context (a single string)."""
+
+        # Convert the context to the indices (0 to 26)
         index_string = torch.tensor([self.vocab_index.index_of(x) for x in context], dtype=torch.long,
                                     device=self.device)
+
+        # get the models prediction using the forward pass
         predicted = self.forward(index_string)
+
+        # Get the class with the highest probability using argmax since the final activation i  softmax
         predicted_class = torch.argmax(predicted, dim=-1)  # Add dimension for argmax
+
+        # return the predicted class
         return predicted_class
 
 
@@ -132,15 +143,23 @@ def train_frequency_based_classifier(cons_exs, vowel_exs):
 
 
 def raw_string_to_indices(train_cons, train_vowel, vocab_index):
+    """Convert the raw string data to indices using the vocab index. and return it as a list"""
+
+    # Create a list of the consonant strings with the class label 0  and the index of the consonant string
     cons_data = [[train_cons[index], 0, index] for index in range(0, len(train_cons))]
+
+    # Create a list of the vowel strings with the class label 1  and the index of the vowel string
     vowels_data = [[train_vowel[index], 1, len(train_cons) + index] for index in range(0, len(train_vowel))]
 
+    # Combine the consonant and vowel data
     all_data = cons_data + vowels_data
 
+    # Convert the string data to the indices using the vocab index
     for index in all_data:
         index_string = [vocab_index.index_of(x) for x in index[0]]
         index.append(index_string)
 
+    # return the lists that include, string, class label, index and the converted indices
     return all_data
 
 
@@ -156,113 +175,147 @@ def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, de
     """
     try:
 
+        # set the device, it  will be 'cuda' if a GPU is available, otherwise 'cpu'
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+        # Convert the raw string data to indices using the vocab index for the training and testing data
         data = raw_string_to_indices(train_cons_exs, train_vowel_exs, vocab_index)
         test_data = raw_string_to_indices(dev_cons_exs, dev_vowel_exs, vocab_index)
 
-        n_samples = len(data)
-        n_test_samples = len(dev_cons_exs) + len(dev_vowel_exs)
-        epochs = 15
-        batch_size = 4
-        input_dim_size = 20
-        hidden_size = 40
-        hidden_layer1 = 16
-        hidden_layer2 = 8
-        learning_rate = 0.0005
+        # Set the  required hyperparameters
+        n_samples = len(data)         # Number of samples in the training data
+        n_test_samples = len(dev_cons_exs) + len(dev_vowel_exs) # Number of samples in the testing data
+        epochs = 10            # Assign the epoch amount
+        batch_size = 4         # Assign the batch size
+        input_dim_size = 20    # Assign the embedding dimension size
+        hidden_size = 40       # Assign the hidden state size
+        hidden_layer1 = 16     # Assign the hidden layer1 size
+        hidden_layer2 = 8      # Assign the hidden layer2 size
+        learning_rate = 0.0005  # Assign the learning rate
+        dropout_rate = 0.3      # Assign the dropout rate
 
+        # Lists to track both training and dev loss and accuracy
         train_los_ar = []
         train_accuracy_ar = []
         dev_loss_ar = []
         dev_accuracy_ar = []
         epoch_array = np.array([x for x in range(1, epochs + 1)])
 
+        # Get the unique charactor amount from the vocab index (get the length of the charactor dictionary)
         unique_charactor_amount = vocab_index.__len__()
 
+
+        # Initialize the RNN model
         rnn_classification_model = RNNClassifier(input_size=input_dim_size, unique_charactor_amount=unique_charactor_amount,
                                                  hidden_size=hidden_size, hidden_layer1=hidden_layer1,
-                                                 hidden_layer2=hidden_layer2, vocab_index=vocab_index, device=str(device))
+                                                 hidden_layer2=hidden_layer2, vocab_index=vocab_index,dropout=dropout_rate,
+                                                 device=str(device))
 
+        # Assign loss function as CrossEntropyLoss
         loss_function = nn.CrossEntropyLoss().to(device)
 
+        # Assign the optimizer as Adam optimizer with learning rate and a weight decay (to handle overfitting)
         optimizer = torch.optim.Adam(rnn_classification_model.parameters(), lr=learning_rate, weight_decay=0.0001)
 
+        # Start the training process
         for epoch in range(epochs):
-            rnn_classification_model.train()
-            total_loss = 0
-            train_correct = 0
-            random.shuffle(data)
+            rnn_classification_model.train() # Set the model to training mode
+            total_loss = 0     # Assign total loss 0 for each starting epoch
+            train_correct = 0  # Assign total correct predictions 0 for each starting epoch
+            random.shuffle(data) # Shuffle the data for each epoch since the data is ordered
 
+            #  Batch training for the epoch
             for i in range(0, n_samples, batch_size):
                 batch_data = data[i:min(i + batch_size, n_samples)]
 
+                # Get the indices and the labels of the batch data
                 batch_index_data = torch.LongTensor([x[3] for x in batch_data]).to(device)
                 batch_label = torch.LongTensor([x[1] for x in batch_data]).to(device)
 
+                # Zero the gradients
                 optimizer.zero_grad()
+
+                # Get the model prediction
                 y = rnn_classification_model(batch_index_data)
 
-                # Ensure outputs and labels have correct shape
+                # If the batch size is 1, add a batch dimension
                 if batch_size == 1:
                     # Add batch dimension
                     y = y.unsqueeze(0)
 
+                # Calculate the loss
                 loss = loss_function(y, batch_label)
+
+                # Add the loss to the total loss
                 total_loss += loss.item()
 
+                # Get the predicted class
                 _, train_predicted = torch.max(y.data, 1)
 
+                # Calculate the correct predictions
                 train_correct += (train_predicted == batch_label).sum().item()
 
+                # Execute the back propagation
                 loss.backward()
+
+                # Update the weights
                 optimizer.step()
 
-            # Calculate average loss properly accounting for possibly incomplete final batch
-            n_batches = (n_samples + batch_size - 1) // batch_size
-            avg_loss = total_loss / n_batches
-            train_accuracy = train_correct / n_samples
+            # Calculate average loss
+            n_batches = (n_samples + batch_size - 1) // batch_size # Calculate the number of batches
+            avg_loss = total_loss / n_batches                  # Calculate the average loss
+            train_accuracy = train_correct / n_samples        # Calculate the training accuracy
 
-            train_los_ar.append(avg_loss)
-            train_accuracy_ar.append(train_accuracy)
+            train_los_ar.append(avg_loss)  # Append the average loss to the list
+            train_accuracy_ar.append(train_accuracy)   # Append the training accuracy to the list
 
             # Evaluation phase
-            rnn_classification_model.eval()
-            total_test_loss = 0
-            test_correct = 0
+            rnn_classification_model.eval()  # Set the model to evaluation mode
+            total_test_loss = 0   #  # Assign total loss 0
+            test_correct = 0      # Assign total correct predictions 0
 
-            with torch.no_grad():
-                for i in range(0, n_test_samples, batch_size):
+            # Batch testing for the epoch
+            with torch.no_grad():           # blocked calculating gradients
+                for i in range(0, n_test_samples, batch_size):   # Loop through the testing data
                     batch_test_data = test_data[i:min(i + batch_size, n_test_samples)]
 
+                    # Prepare test batch data
                     batch_test_index_data = torch.LongTensor([x[3] for x in batch_test_data]).to(device)
                     batch_test_label = torch.LongTensor([x[1] for x in batch_test_data]).to(device)
 
+                    # Get the model prediction
                     y = rnn_classification_model(batch_test_index_data)
 
+                    # If the batch size is 1, add a batch dimension
                     if batch_size == 1:
                         # Add batch dimension
                         y = y.unsqueeze(0)
 
+                    # Calculate the test loss
                     test_loss = loss_function(y, batch_test_label)
 
+                    # Add the loss to the total loss
                     total_test_loss += test_loss.item()
 
+                    # Get the predicted class
                     _, test_predicted = torch.max(y.data, 1)
                     test_correct += (test_predicted == batch_test_label).sum().item()
 
-                n_test_batches = (n_test_samples + batch_size - 1) // batch_size
-                avg_test_loss = total_test_loss / n_test_batches
-                test_accuracy = test_correct / n_test_samples
 
-                dev_loss_ar.append(avg_test_loss)
-                dev_accuracy_ar.append(test_accuracy)
+                n_test_batches = (n_test_samples + batch_size - 1) // batch_size # Calculate the number of batches
+                avg_test_loss = total_test_loss / n_test_batches     # Calculate the average loss
+                test_accuracy = test_correct / n_test_samples        # Calculate the test accuracy
 
-            print(f'Epoch {epoch + 1}:')
-            print(f'Training Loss: {avg_loss:.4f}')
-            print(f'Test Loss: {avg_test_loss:.4f}')
-            print(f'Training Accuracy: {train_accuracy:.3f}')
-            print(f'Test Accuracy: {test_accuracy :.3f}')
+                dev_loss_ar.append(avg_test_loss)  # Append the average loss to the list
+                dev_accuracy_ar.append(test_accuracy) # Append the test accuracy to the list
 
+            print(f'Epoch {epoch + 1}:') # Print the epoch number
+            print(f'Training Loss: {avg_loss:.4f}')    # Print the training loss
+            print(f'Test Loss: {avg_test_loss:.4f}')   # Print the test loss
+            print(f'Training Accuracy: {train_accuracy:.3f}') # Print the training accuracy
+            print(f'Test Accuracy: {test_accuracy :.3f}')    # Print the test accuracy
+
+        # Plot the accuracy and loss curves
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
         fig.tight_layout(pad=3.0)
 
@@ -292,6 +345,7 @@ def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, de
         torch.save(rnn_classification_model, model_save_path)
         print(f'Model saved to {model_save_path}')
 
+        # Return the trained model
         return rnn_classification_model
 
     except Exception as e:
