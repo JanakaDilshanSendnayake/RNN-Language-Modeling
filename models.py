@@ -192,7 +192,7 @@ def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, de
         hidden_layer1 = 16     # Assign the hidden layer1 size
         hidden_layer2 = 8      # Assign the hidden layer2 size
         learning_rate = 0.0005  # Assign the learning rate
-        dropout_rate = 0.3      # Assign the dropout rate
+        dropout_rate = 0.2      # Assign the dropout rate
 
         # Lists to track both training and dev loss and accuracy
         train_los_ar = []
