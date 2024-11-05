@@ -50,46 +50,66 @@ class FrequencyBasedClassifier(ConsonantVowelClassifier):
 class RNNClassifier(ConsonantVowelClassifier, nn.Module):
     def __init__(self, input_size, unique_charactor_amount, hidden_size, hidden_layer1, hidden_layer2, vocab_index, device='cpu'):
         super(RNNClassifier, self).__init__()
+
+        # Embedding layer to convert character indices to dense vectors
         self.charactor_embedding = nn.Embedding(num_embeddings=unique_charactor_amount, embedding_dim=input_size)
+
+        # LSTM layer
         self.lstm = nn.LSTM(input_size=input_size,  # embedding dimension
                             hidden_size=hidden_size,  # Number of LSTM units
                             num_layers=1,  # Number of LSTM layers
                             batch_first=True,
                             )  # Input shape will be [batch_size, seq_length, input_size]
+
+        # Dropout layer
         self.dropout = nn.Dropout(p=0.3)
+
+        # Relu activation function
         self.relu = nn.ReLU()
+
+        # First dense layer
         self.linear = nn.Linear(hidden_size, hidden_layer1)
+
+        # Second dense layer
         self.linear2 = nn.Linear(hidden_layer1, hidden_layer2)
+
+        # Third dense layer
         self.linear3 = nn.Linear(hidden_layer2, 2)
         self.vocab_index = vocab_index
         self.device = device
 
+        # Assign the device to train the model (GPU or CPU)
         self.to(device)
 
     def forward(self, x):
+        """Forward function for the RNN model."""
+        # If the input is a single batch, add a batch dimension
         if len(x.shape) == 1:
             x = x.unsqueeze(0)
 
+        # Convert the converted indices to the vector embeddings
         embedded_vector = self.charactor_embedding(x)
         output, (hidden, cell) = self.lstm(embedded_vector)
 
+        # Remove if there is any extra dimension
         hidden = hidden.squeeze()
 
-        hidden = hidden.squeeze(0)
+        # Apply the fully connected layer
 
-        val = self.linear(hidden)
+        # Apply the dense layer
+        val = self.linear(hidden) # First dense layer
+        val = self.relu(val) # Relu activation function
+        val = self.dropout(val) # Dropout layer
 
-        val = self.relu(val)
 
-        val = self.dropout(val)
+        val = self.linear2(val) # Second dense layer
+        val = self.relu(val) # Relu activation function
+        val = self.dropout(val) # Dropout layer
 
-        val = self.linear2(val)
+        predicted_val = self.linear3(val) #  Final dense layer
 
-        val = self.relu(val)
-
-        val = self.dropout(val)
-
-        predicted_val = self.linear3(val)
+        # Didn't apply the softmax activation at the end because,
+        # in pytorch it will be added in the loss function default if the loss function is categorical cross entropy
 
         return predicted_val
 
