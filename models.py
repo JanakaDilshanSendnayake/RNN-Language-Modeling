@@ -189,7 +189,7 @@ def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, de
         batch_size = 4         # Assign the batch size
         input_dim_size = 20    # Assign the embedding dimension size
         hidden_size = 40       # Assign the hidden state size
-        hidden_layer1 = 16     # Assign the hidden layer1 size
+        hidden_layer1 = 32     # Assign the hidden layer1 size
         hidden_layer2 = 8      # Assign the hidden layer2 size
         learning_rate = 0.0005  # Assign the learning rate
         dropout_rate = 0.2      # Assign the dropout rate
@@ -556,11 +556,6 @@ def train_lm(args, train_text, dev_text, vocab_index):
         loss_function = nn.NLLLoss().to(device)  # Negative log likelihood
         optimizer = torch.optim.Adam(language_model.parameters(), lr=learning_rate)
 
-        # for index in range(0, len(chunked_train_text)):
-        #     print(chunked_train_text[index],  target_train[index])
-        #
-        # # for index in range(0, len(chunked_dev_text)):
-        # #     print(chunked_dev_text[index],  target_test[index])
 
         print("Train text: ", len(chunked_train_text))
         print("Dev text: ", len(chunked_dev_text))
