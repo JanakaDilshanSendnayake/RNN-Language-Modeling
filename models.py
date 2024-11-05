@@ -134,144 +134,149 @@ def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, de
     :param vocab_index: an Indexer of the character vocabulary (27 characters)
     :return: an RNNClassifier instance trained on the given data
     """
+    try:
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    data = raw_string_to_indices(train_cons_exs, train_vowel_exs, vocab_index)
-    test_data = raw_string_to_indices(dev_cons_exs, dev_vowel_exs, vocab_index)
+        data = raw_string_to_indices(train_cons_exs, train_vowel_exs, vocab_index)
+        test_data = raw_string_to_indices(dev_cons_exs, dev_vowel_exs, vocab_index)
 
-    n_samples = len(data)
-    n_test_samples = len(dev_cons_exs) + len(dev_vowel_exs)
-    epochs = 15
-    batch_size = 4
-    input_dim_size = 20
-    hidden_size = 40
-    hidden_layer1 = 16
-    hidden_layer2 = 8
-    learning_rate = 0.0005
+        n_samples = len(data)
+        n_test_samples = len(dev_cons_exs) + len(dev_vowel_exs)
+        epochs = 15
+        batch_size = 4
+        input_dim_size = 20
+        hidden_size = 40
+        hidden_layer1 = 16
+        hidden_layer2 = 8
+        learning_rate = 0.0005
 
-    train_los_ar = []
-    train_accuracy_ar = []
-    dev_loss_ar = []
-    dev_accuracy_ar = []
-    epoch_array = np.array([x for x in range(1, epochs + 1)])
+        train_los_ar = []
+        train_accuracy_ar = []
+        dev_loss_ar = []
+        dev_accuracy_ar = []
+        epoch_array = np.array([x for x in range(1, epochs + 1)])
 
-    unique_charactor_amount = vocab_index.__len__()
+        unique_charactor_amount = vocab_index.__len__()
 
-    rnn_classification_model = RNNClassifier(input_size=input_dim_size, unique_charactor_amount=unique_charactor_amount,
-                                             hidden_size=hidden_size, hidden_layer1=hidden_layer1,
-                                             hidden_layer2=hidden_layer2, vocab_index=vocab_index, device=str(device))
+        rnn_classification_model = RNNClassifier(input_size=input_dim_size, unique_charactor_amount=unique_charactor_amount,
+                                                 hidden_size=hidden_size, hidden_layer1=hidden_layer1,
+                                                 hidden_layer2=hidden_layer2, vocab_index=vocab_index, device=str(device))
 
-    loss_function = nn.CrossEntropyLoss().to(device)
+        loss_function = nn.CrossEntropyLoss().to(device)
 
-    optimizer = torch.optim.Adam(rnn_classification_model.parameters(), lr=learning_rate, weight_decay=0.0001)
+        optimizer = torch.optim.Adam(rnn_classification_model.parameters(), lr=learning_rate, weight_decay=0.0001)
 
-    for epoch in range(epochs):
-        rnn_classification_model.train()
-        total_loss = 0
-        train_correct = 0
-        random.shuffle(data)
+        for epoch in range(epochs):
+            rnn_classification_model.train()
+            total_loss = 0
+            train_correct = 0
+            random.shuffle(data)
 
-        for i in range(0, n_samples, batch_size):
-            batch_data = data[i:min(i + batch_size, n_samples)]
+            for i in range(0, n_samples, batch_size):
+                batch_data = data[i:min(i + batch_size, n_samples)]
 
-            batch_index_data = torch.LongTensor([x[3] for x in batch_data]).to(device)
-            batch_label = torch.LongTensor([x[1] for x in batch_data]).to(device)
+                batch_index_data = torch.LongTensor([x[3] for x in batch_data]).to(device)
+                batch_label = torch.LongTensor([x[1] for x in batch_data]).to(device)
 
-            optimizer.zero_grad()
-            y = rnn_classification_model(batch_index_data)
+                optimizer.zero_grad()
+                y = rnn_classification_model(batch_index_data)
 
-            # Ensure outputs and labels have correct shape
-            if batch_size == 1:
-                # Add batch dimension
-                y = y.unsqueeze(0)
-
-            loss = loss_function(y, batch_label)
-            total_loss += loss.item()
-
-            _, train_predicted = torch.max(y.data, 1)
-
-            train_correct += (train_predicted == batch_label).sum().item()
-
-            loss.backward()
-            optimizer.step()
-
-        # Calculate average loss properly accounting for possibly incomplete final batch
-        n_batches = (n_samples + batch_size - 1) // batch_size
-        avg_loss = total_loss / n_batches
-        train_accuracy = train_correct / n_samples
-
-        train_los_ar.append(avg_loss)
-        train_accuracy_ar.append(train_accuracy)
-
-        # Evaluation phase
-        rnn_classification_model.eval()
-        total_test_loss = 0
-        test_correct = 0
-
-        with torch.no_grad():
-            for i in range(0, n_test_samples, batch_size):
-                batch_test_data = test_data[i:min(i + batch_size, n_test_samples)]
-
-                batch_test_index_data = torch.LongTensor([x[3] for x in batch_test_data]).to(device)
-                batch_test_label = torch.LongTensor([x[1] for x in batch_test_data]).to(device)
-
-                y = rnn_classification_model(batch_test_index_data)
-
+                # Ensure outputs and labels have correct shape
                 if batch_size == 1:
                     # Add batch dimension
                     y = y.unsqueeze(0)
 
-                test_loss = loss_function(y, batch_test_label)
+                loss = loss_function(y, batch_label)
+                total_loss += loss.item()
 
-                total_test_loss += test_loss.item()
+                _, train_predicted = torch.max(y.data, 1)
 
-                _, test_predicted = torch.max(y.data, 1)
-                test_correct += (test_predicted == batch_test_label).sum().item()
+                train_correct += (train_predicted == batch_label).sum().item()
 
-            n_test_batches = (n_test_samples + batch_size - 1) // batch_size
-            avg_test_loss = total_test_loss / n_test_batches
-            test_accuracy = test_correct / n_test_samples
+                loss.backward()
+                optimizer.step()
 
-            dev_loss_ar.append(avg_test_loss)
-            dev_accuracy_ar.append(test_accuracy)
+            # Calculate average loss properly accounting for possibly incomplete final batch
+            n_batches = (n_samples + batch_size - 1) // batch_size
+            avg_loss = total_loss / n_batches
+            train_accuracy = train_correct / n_samples
 
-        print(f'Epoch {epoch + 1}:')
-        print(f'Training Loss: {avg_loss:.4f}')
-        print(f'Test Loss: {avg_test_loss:.4f}')
-        print(f'Training Accuracy: {train_accuracy:.3f}')
-        print(f'Test Accuracy: {test_accuracy :.3f}')
+            train_los_ar.append(avg_loss)
+            train_accuracy_ar.append(train_accuracy)
 
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
-    fig.tight_layout(pad=3.0)
+            # Evaluation phase
+            rnn_classification_model.eval()
+            total_test_loss = 0
+            test_correct = 0
 
-    # Plot Loss curves in the first subplot
-    ax1.plot(epoch_array, train_los_ar, label='Train Loss')
-    ax1.plot(epoch_array, dev_loss_ar, label='Dev Loss')
-    ax1.set_xlabel('Epoch')
-    ax1.set_ylabel('Loss')
-    ax1.legend()
-    ax1.grid(True)
-    ax1.set_title('Training and Development Loss')
+            with torch.no_grad():
+                for i in range(0, n_test_samples, batch_size):
+                    batch_test_data = test_data[i:min(i + batch_size, n_test_samples)]
 
-    # Plot Accuracy curves in the second subplot
-    ax2.plot(epoch_array, train_accuracy_ar, label='Train Accuracy')
-    ax2.plot(epoch_array, dev_accuracy_ar, label='Dev Accuracy')
-    ax2.set_xlabel('Epoch')
-    ax2.set_ylabel('Accuracy')
-    ax2.legend()
-    ax2.grid(True)
-    ax2.set_title('Training and Development Accuracy')
+                    batch_test_index_data = torch.LongTensor([x[3] for x in batch_test_data]).to(device)
+                    batch_test_label = torch.LongTensor([x[1] for x in batch_test_data]).to(device)
 
-    plt.savefig('classifier_accuracy_loss.png')
+                    y = rnn_classification_model(batch_test_index_data)
 
-    #Saving the trained model
-    os.makedirs('trained_models', exist_ok=True)
-    model_save_path = os.path.join('trained_models', 'rnn_binary_classifier.pth')
-    torch.save(rnn_classification_model, model_save_path)
-    print(f'Model saved to {model_save_path}')
+                    if batch_size == 1:
+                        # Add batch dimension
+                        y = y.unsqueeze(0)
 
-    return rnn_classification_model
+                    test_loss = loss_function(y, batch_test_label)
+
+                    total_test_loss += test_loss.item()
+
+                    _, test_predicted = torch.max(y.data, 1)
+                    test_correct += (test_predicted == batch_test_label).sum().item()
+
+                n_test_batches = (n_test_samples + batch_size - 1) // batch_size
+                avg_test_loss = total_test_loss / n_test_batches
+                test_accuracy = test_correct / n_test_samples
+
+                dev_loss_ar.append(avg_test_loss)
+                dev_accuracy_ar.append(test_accuracy)
+
+            print(f'Epoch {epoch + 1}:')
+            print(f'Training Loss: {avg_loss:.4f}')
+            print(f'Test Loss: {avg_test_loss:.4f}')
+            print(f'Training Accuracy: {train_accuracy:.3f}')
+            print(f'Test Accuracy: {test_accuracy :.3f}')
+
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
+        fig.tight_layout(pad=3.0)
+
+        # Plot Loss curves in the first subplot
+        ax1.plot(epoch_array, train_los_ar, label='Train Loss')
+        ax1.plot(epoch_array, dev_loss_ar, label='Dev Loss')
+        ax1.set_xlabel('Epoch')
+        ax1.set_ylabel('Loss')
+        ax1.legend()
+        ax1.grid(True)
+        ax1.set_title('Training and Development Loss')
+
+        # Plot Accuracy curves in the second subplot
+        ax2.plot(epoch_array, train_accuracy_ar, label='Train Accuracy')
+        ax2.plot(epoch_array, dev_accuracy_ar, label='Dev Accuracy')
+        ax2.set_xlabel('Epoch')
+        ax2.set_ylabel('Accuracy')
+        ax2.legend()
+        ax2.grid(True)
+        ax2.set_title('Training and Development Accuracy')
+
+        plt.savefig('classifier_accuracy_loss.png')
+
+        #Saving the trained model
+        os.makedirs('trained_models', exist_ok=True)
+        model_save_path = os.path.join('trained_models', 'rnn_binary_classifier.pth')
+        torch.save(rnn_classification_model, model_save_path)
+        print(f'Model saved to {model_save_path}')
+
+        return rnn_classification_model
+
+    except Exception as e:
+        print(f"Unexpected error in training process: {str(e)}")
+        raise
 
 
 #####################
