@@ -125,7 +125,7 @@ class RNNClassifier(ConsonantVowelClassifier, nn.Module):
         # get the models prediction using the forward pass
         predicted = self.forward(index_string)
 
-        # Get the class with the highest probability using argmax since the final activation i  softmax
+        # Get the class with the highest probability using argmax since the final activation is softmax
         predicted_class = torch.argmax(predicted, dim=-1)  # Add dimension for argmax
 
         # return the predicted class
@@ -185,7 +185,7 @@ def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, de
         # Set the  required hyperparameters
         n_samples = len(data)         # Number of samples in the training data
         n_test_samples = len(dev_cons_exs) + len(dev_vowel_exs) # Number of samples in the testing data
-        epochs = 10            # Assign the epoch amount
+        epochs = 15            # Assign the epoch amount
         batch_size = 4         # Assign the batch size
         input_dim_size = 20    # Assign the embedding dimension size
         hidden_size = 40       # Assign the hidden state size
@@ -400,19 +400,22 @@ class RNNLanguageModel(LanguageModel, nn.Module):
         self.model_emb = model_emb  # embedding dimension
         self.model_dec = model_dec  # hidden layer size
         self.vocab_index = vocab_index  # vocab index
-        self.device = device
+        self.device = device       # set the device cpu or gpu to train the model
 
-        self.num_layers = num_layers
+        self.num_layers = num_layers  # set number of hidden layers for lstm
 
-        self.vocab_size = vocab_index.__len__()
+        self.vocab_size = vocab_index.__len__() # get the dictionary size of the index (27 due to start of sequence tag is added)
 
+        # Embedding layer to convert character indices to dense vectors
         self.embedding = nn.Embedding(num_embeddings=self.vocab_size + 1, embedding_dim=model_emb)
 
+        # LSTM layer
         self.lstm = nn.LSTM(input_size=model_emb,
                             hidden_size=model_dec,
                             num_layers=num_layers,
                             dropout=dropout_value if num_layers > 1 else 0,
                             batch_first=True)
+
 
         self.linear = nn.Linear(model_dec, self.vocab_size - 1)
 
