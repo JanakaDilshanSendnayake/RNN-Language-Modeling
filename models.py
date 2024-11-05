@@ -447,136 +447,140 @@ def train_lm(args, train_text, dev_text, vocab_index):
     :param vocab_index: an Indexer of the character vocabulary (27 characters)
     :return: an RNNLanguageModel instance trained on the given data
     """
+    try:
+        chunk_size = 20
+        overlap_size = 5
+        learning_rate = 0.002
+        epochs = 10
+        batch_size = 8
+        burn_in_length = 5
+        lstm_layer_count = 1
+        embedding_size = 16
+        hidden_layers = 40
 
-    chunk_size = 20
-    overlap_size = 5
-    learning_rate = 0.002
-    epochs = 10
-    batch_size = 8
-    burn_in_length = 5
-    lstm_layer_count = 1
-    embedding_size = 16
-    hidden_layers = 40
+        vocab_index.add_and_get_index("sos")
 
-    vocab_index.add_and_get_index("sos")
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        chunked_train_text, target_train = chunk_required_data(train_text, chunk_size, vocab_index, overlap_size)
+        chunked_dev_text, target_test = chunk_required_data(dev_text, chunk_size, vocab_index, overlap_size)
 
-    chunked_train_text, target_train = chunk_required_data(train_text, chunk_size, vocab_index, overlap_size)
-    chunked_dev_text, target_test = chunk_required_data(dev_text, chunk_size, vocab_index, overlap_size)
+        train_los_ar = []
+        dev_loss_ar = []
+        epoch_array = np.array([x for x in range(1, epochs + 1)])
 
-    train_los_ar = []
-    dev_loss_ar = []
-    epoch_array = np.array([x for x in range(1, epochs + 1)])
+        train_chunks = torch.from_numpy(chunked_train_text).long().to(device)
+        train_targets = torch.from_numpy(target_train).long().to(device)
+        dev_chunks = torch.from_numpy(chunked_dev_text).long().to(device)
+        dev_targets = torch.from_numpy(target_test).long().to(device)
 
-    train_chunks = torch.from_numpy(chunked_train_text).long().to(device)
-    train_targets = torch.from_numpy(target_train).long().to(device)
-    dev_chunks = torch.from_numpy(chunked_dev_text).long().to(device)
-    dev_targets = torch.from_numpy(target_test).long().to(device)
+        language_model = RNNLanguageModel(model_emb=embedding_size, model_dec=hidden_layers, vocab_index=vocab_index,
+                                          num_layers=lstm_layer_count, device=str(device))
+        loss_function = nn.NLLLoss().to(device)  # Negative log likelihood
+        optimizer = torch.optim.Adam(language_model.parameters(), lr=learning_rate)
 
-    language_model = RNNLanguageModel(model_emb=embedding_size, model_dec=hidden_layers, vocab_index=vocab_index,
-                                      num_layers=lstm_layer_count, device=str(device))
-    loss_function = nn.NLLLoss().to(device)  # Negative log likelihood
-    optimizer = torch.optim.Adam(language_model.parameters(), lr=learning_rate)
+        # for index in range(0, len(chunked_train_text)):
+        #     print(chunked_train_text[index],  target_train[index])
+        #
+        # # for index in range(0, len(chunked_dev_text)):
+        # #     print(chunked_dev_text[index],  target_test[index])
 
-    # for index in range(0, len(chunked_train_text)):
-    #     print(chunked_train_text[index],  target_train[index])
-    #
-    # # for index in range(0, len(chunked_dev_text)):
-    # #     print(chunked_dev_text[index],  target_test[index])
+        print("Train text: ", len(chunked_train_text))
+        print("Dev text: ", len(chunked_dev_text))
+        print("Vocab size: ", vocab_index.__len__())
 
-    print("Train text: ", len(chunked_train_text))
-    print("Dev text: ", len(chunked_dev_text))
-    print("Vocab size: ", vocab_index.__len__())
+        for epoch in range(epochs):
+            total_loss = 0
+            language_model.train()
 
-    for epoch in range(epochs):
-        total_loss = 0
-        language_model.train()
+            for i in range(0, len(train_chunks), batch_size):
+                batch_chunks = train_chunks[i:i + batch_size]
+                batch_targets = train_targets[i:i + batch_size]
 
-        for i in range(0, len(train_chunks), batch_size):
-            batch_chunks = train_chunks[i:i + batch_size]
-            batch_targets = train_targets[i:i + batch_size]
-
-            optimizer.zero_grad()
-
-            if burn_in_length > 0:
-                with torch.no_grad():
-                    # Only use burn_in_length characters for burn-in
-                    burn_in_input = batch_chunks[:, :burn_in_length]
-                    burn_out, hidden = language_model(burn_in_input)
-
-                    # print("Burn in input : ", burn_in_input, "Burn out : ", burn_out)
-
-                model_input = batch_chunks[:, burn_in_length:]
-                batch_targets = batch_targets[:, burn_in_length:]
-            else:
-                model_input = batch_chunks
-
-            # Detach hidden state for next batch
-            hidden = (hidden[0].detach(), hidden[1].detach())
-
-            y_output, hidden = language_model(model_input, hidden)
-
-            y_output = y_output.view(-1, vocab_index.__len__() - 1)
-            batch_targets = batch_targets.reshape(-1)
-
-            loss = loss_function(y_output, batch_targets)
-            total_loss += loss.item()
-
-            loss.backward()
-            optimizer.step()
-
-            # print(f"Epoch : {epoch + 1}", [torch.argmax(x).cpu().item() for x in y_output], batch_targets)
-
-        language_model.eval()
-        with torch.no_grad():
-            dev_total_loss = 0
-            for i in range(0, len(dev_chunks), batch_size):
-                batch_dev_chunks = dev_chunks[i:i + batch_size]
-                batch_dev_targets = dev_targets[i:i + batch_size]
+                optimizer.zero_grad()
 
                 if burn_in_length > 0:
-                    # Only use burn_in_length characters for burn-in
-                    burn_in_input = batch_dev_chunks[:, :burn_in_length]
-                    burn_out, hidden = language_model(burn_in_input)
+                    with torch.no_grad():
+                        # Only use burn_in_length characters for burn-in
+                        burn_in_input = batch_chunks[:, :burn_in_length]
+                        burn_out, hidden = language_model(burn_in_input)
 
-                    model_input = batch_dev_chunks[:, burn_in_length:]
-                    batch_dev_targets = batch_dev_targets[:, burn_in_length:]
+                        # print("Burn in input : ", burn_in_input, "Burn out : ", burn_out)
+
+                    model_input = batch_chunks[:, burn_in_length:]
+                    batch_targets = batch_targets[:, burn_in_length:]
                 else:
-                    model_input = batch_dev_chunks
-                    hidden = None
+                    model_input = batch_chunks
 
-                batch_dev_targets = batch_dev_targets.reshape(-1)
+                # Detach hidden state for next batch
+                hidden = (hidden[0].detach(), hidden[1].detach())
+
                 y_output, hidden = language_model(model_input, hidden)
 
                 y_output = y_output.view(-1, vocab_index.__len__() - 1)
+                batch_targets = batch_targets.reshape(-1)
 
-                dev_loss = loss_function(y_output, batch_dev_targets)
+                loss = loss_function(y_output, batch_targets)
+                total_loss += loss.item()
 
-                dev_total_loss += dev_loss.item()
+                loss.backward()
+                optimizer.step()
 
-            n_train_batches = (len(train_chunks) + batch_size - 1) // batch_size
-            n_test_batches = (len(dev_chunks) + batch_size - 1) // batch_size
+                # print(f"Epoch : {epoch + 1}", [torch.argmax(x).cpu().item() for x in y_output], batch_targets)
 
-            train_avg_loss = total_loss / n_train_batches
-            train_los_ar.append(train_avg_loss)
+            language_model.eval()
+            with torch.no_grad():
+                dev_total_loss = 0
+                for i in range(0, len(dev_chunks), batch_size):
+                    batch_dev_chunks = dev_chunks[i:i + batch_size]
+                    batch_dev_targets = dev_targets[i:i + batch_size]
 
-            dev_avg_loss = dev_total_loss / n_test_batches
-            dev_loss_ar.append(dev_avg_loss)
+                    if burn_in_length > 0:
+                        # Only use burn_in_length characters for burn-in
+                        burn_in_input = batch_dev_chunks[:, :burn_in_length]
+                        burn_out, hidden = language_model(burn_in_input)
 
-            print(f"Epoch : {epoch + 1}")
-            print(f"Train Average Loss : {train_avg_loss}")
-            print(f"Test Average Loss : {dev_avg_loss}")
+                        model_input = batch_dev_chunks[:, burn_in_length:]
+                        batch_dev_targets = batch_dev_targets[:, burn_in_length:]
+                    else:
+                        model_input = batch_dev_chunks
+                        hidden = None
 
-    plt.plot(epoch_array, train_los_ar, label='Train Loss')
-    plt.plot(epoch_array, dev_loss_ar, label='Dev Loss')
-    plt.xlabel('Epoch')
-    plt.ylabel('Loss')
-    plt.title('Training and Development Loss of the Language model')
-    plt.legend()
-    plt.savefig('language_model_loss.png')
+                    batch_dev_targets = batch_dev_targets.reshape(-1)
+                    y_output, hidden = language_model(model_input, hidden)
 
-    return language_model
+                    y_output = y_output.view(-1, vocab_index.__len__() - 1)
+
+                    dev_loss = loss_function(y_output, batch_dev_targets)
+
+                    dev_total_loss += dev_loss.item()
+
+                n_train_batches = (len(train_chunks) + batch_size - 1) // batch_size
+                n_test_batches = (len(dev_chunks) + batch_size - 1) // batch_size
+
+                train_avg_loss = total_loss / n_train_batches
+                train_los_ar.append(train_avg_loss)
+
+                dev_avg_loss = dev_total_loss / n_test_batches
+                dev_loss_ar.append(dev_avg_loss)
+
+                print(f"Epoch : {epoch + 1}")
+                print(f"Train Average Loss : {train_avg_loss}")
+                print(f"Test Average Loss : {dev_avg_loss}")
+
+        plt.plot(epoch_array, train_los_ar, label='Train Loss')
+        plt.plot(epoch_array, dev_loss_ar, label='Dev Loss')
+        plt.xlabel('Epoch')
+        plt.ylabel('Loss')
+        plt.title('Training and Development Loss of the Language model')
+        plt.legend()
+        plt.savefig('language_model_loss.png')
+
+        return language_model
+
+    except Exception as e:
+        print(f"Unexpected error in training process: {str(e)}")
+        raise
 
 
 #################
