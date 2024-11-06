@@ -728,8 +728,13 @@ def run_experiment(max_context_length=20):
             raise
 
     def evaluate_model_on_context_lengths(model, consonant_examples, vowel_examples):
+
         accuracy_by_length = {}
         vowels = 'aeiou'
+
+        context_lengths = []
+        vowel_counts = []
+        consonant_counts = []
 
         for length in range(1, max_context_length + 1):
             if length == 20:
@@ -746,6 +751,11 @@ def run_experiment(max_context_length=20):
                     else:
                         trimmed_consonants.append(ex[:-1])
 
+            # Append data to lists
+            context_lengths.append(length)
+            vowel_counts.append(len(trimmed_vowels))
+            consonant_counts.append(len(trimmed_consonants))
+
             # model evaluation
             correct_predictions = sum(1 for ex in trimmed_consonants if model.predict(ex) == 0)
             correct_predictions += sum(1 for ex in trimmed_vowels if model.predict(ex) == 1)
@@ -755,9 +765,18 @@ def run_experiment(max_context_length=20):
             accuracy_by_length[length] = accuracy
             print(f"Context length {length}: Accuracy = {accuracy:.3f}")
 
-        return accuracy_by_length
+        class_imbalance_data = {
+            'context_length': context_lengths,
+            'vowel_count': vowel_counts,
+            'consonant_count': consonant_counts
+        }
+
+        return accuracy_by_length, class_imbalance_data
+
+    os.makedirs('plots', exist_ok=True)
 
     def visualize_accuracy_trend(accuracy_data, title):
+        save_path = os.path.join('plots', 'accuracy_vs_context_length.png')
         lengths = list(accuracy_data.keys())
         accuracies = list(accuracy_data.values())
 
@@ -767,7 +786,39 @@ def run_experiment(max_context_length=20):
         plt.xlabel("Context Length")
         plt.ylabel("Accuracy")
         plt.grid(True)
-        plt.show()
+        plt.savefig(save_path)  # Save the plot to the specified file path
+        plt.close()
+        print(f'Accuracy vs context length plot was saved to {save_path}.')
+
+    def visualize_class_imbalance(data):
+        save_path = os.path.join('plots', 'class_imbalance_vs_context_length.png')
+        x = np.arange(len(data['context_length']))  # the label locations
+        width = 0.35  # the width of the bars
+
+        fig, ax = plt.subplots(figsize=(12, 6))
+        bars1 = ax.bar(x - width / 2, data['vowel_count'], width, label='Vowel Count', color='blue')
+        bars2 = ax.bar(x + width / 2, data['consonant_count'], width, label='Consonant Count', color='red')
+
+        # Adding labels and title
+        ax.set_xlabel('Context Length')
+        ax.set_ylabel('Count')
+        ax.set_title('Vowel and Consonant Counts by Context Length')
+        ax.set_xticks(x)
+        ax.set_xticklabels(data['context_length'])
+        ax.legend()
+
+        # Adding count labels on top of the bars
+        for bar in bars1 + bars2:
+            height = bar.get_height()
+            ax.annotate(f'{height}',
+                        xy=(bar.get_x() + bar.get_width() / 2, height),
+                        xytext=(0, 3),  # 3 points vertical offset
+                        textcoords="offset points",
+                        ha='center', va='bottom',
+                        rotation=90)
+        plt.savefig(save_path)  
+        plt.close()
+        print(f'Class imbalance vs context length plot was saved to {save_path}.')
 
     # Vocabulary and indexer
     vocab = [chr(ord('a') + i) for i in range(26)] + [' ']
@@ -791,8 +842,9 @@ def run_experiment(max_context_length=20):
 
     # Evaluate and visualize
     print("\nEvaluating RNN Classifier")
-    rnn_accuracy_data = evaluate_model_on_context_lengths(rnn_model, dev_cons_exs, dev_vowel_exs)
+    rnn_accuracy_data, class_imbalance_data = evaluate_model_on_context_lengths(rnn_model, dev_cons_exs, dev_vowel_exs)
     visualize_accuracy_trend(rnn_accuracy_data, "RNN Classifier Accuracy vs. Context Length")
+    visualize_class_imbalance(class_imbalance_data)
 
 
 def main():
