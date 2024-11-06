@@ -521,22 +521,27 @@ def chunk_required_data(text, chunk_size, vocab_index, overlap_size=1):
     chunks_extracted = []
     target_extracted = []
 
+    # The process of creating overlapping chunks
     for index in range(0, len(text) - chunk_size, overlap_size):
         chunks_extracted.append(text[index:index + chunk_size - 1])
         target_extracted.append(text[index:index + chunk_size])
 
+    # Get the extracted indices of the selected chunks and the target value of each chunk
     chunks_extracted, target_extracted = extract_required_indices(chunks_extracted, target_extracted, vocab_index)
 
+    # Return both chunk extracted and chunk values
     return chunks_extracted, target_extracted
 
 
 def extract_required_indices(extracted_text, extracted_target, vocab_index):
-    # Prepend SOS token to each sequence instead of the whole list
+    # Add SOS token to each sequence instead of the whole list
     text_indices = np.asarray([[vocab_index.index_of("sos")] + [vocab_index.index_of(x) for x in seq]
                                for seq in extracted_text])
+    # Get the target value of the indices
     target_indices = np.asarray([[vocab_index.index_of(x) for x in index]
                                  for index in extracted_target])
 
+    # Return the indices of the text and the target values
     return text_indices, target_indices
 
 
