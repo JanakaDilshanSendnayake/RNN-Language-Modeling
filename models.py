@@ -456,6 +456,7 @@ class RNNLanguageModel(LanguageModel, nn.Module):
         return final_output, (hidden, cell)
 
     def get_log_prob_single(self, next_char, context, hidden=None):
+        # Set the model to evaluation mode
         self.eval()
 
         # Add SOS token at the start if context is empty
@@ -464,40 +465,53 @@ class RNNLanguageModel(LanguageModel, nn.Module):
         else:
             context_indices = [self.vocab_index.index_of(x) for x in context]
 
+        # convert the context text to a tensor and move it to device
         context_text = torch.tensor([context_indices], dtype=torch.long).to(self.device)
 
-        print(context_text.shape)
 
         with torch.no_grad():
+            # Get the output and hidden states
             y_output, hidden_output = self.forward(context_text, hidden)
 
+            # Get the last character predicted
             last_charactor_predicted = y_output[0, -1]
 
             print(last_charactor_predicted.shape)
 
             print(last_charactor_predicted)
 
+            # Get the index of the next character
             next_charactor_actual_index = self.vocab_index.index_of(next_char)
 
+            # Get the log probability of the last character predicted
             log_probability = last_charactor_predicted[next_charactor_actual_index]
 
             print("predicted : ", self.vocab_index.get_object(torch.argmax(last_charactor_predicted).cpu().item()),
                   "actual", next_char)
 
+            # return the log probability and the hidden states
             return log_probability, hidden_output
 
     def get_log_prob_sequence(self, next_chars, context):
+
+        # Assign log probability as 0
         total_log_probability = 0
 
+        # Assign the current context
         current_context = context
 
+        # Assign the hidden state as None
         hidden = None
 
+        # process each character in the next characters
         for index in range(0, len(next_chars)):
+            # Get the log probability of the next character
             log_probability, hidden = self.get_log_prob_single(next_chars[index], current_context, hidden)
 
+            # Add the log probability to the total log probability
             total_log_probability += log_probability
 
+            # Update the context by removing the first charactor in previous and adding the predicted charactor
             current_context = current_context[1:] + next_chars[index]
 
         return total_log_probability.cpu().item()
