@@ -409,20 +409,23 @@ class RNNLanguageModel(LanguageModel, nn.Module):
         # Embedding layer to convert character indices to dense vectors
         self.embedding = nn.Embedding(num_embeddings=self.vocab_size + 1, embedding_dim=model_emb)
 
-        # LSTM layer
+        # LSTM layer, dropout is applied if number of layers are greater than 1
         self.lstm = nn.LSTM(input_size=model_emb,
                             hidden_size=model_dec,
                             num_layers=num_layers,
                             dropout=dropout_value if num_layers > 1 else 0,
                             batch_first=True)
 
-
+        # Linear layer to convert the hidden layer to the vocab size
         self.linear = nn.Linear(model_dec, self.vocab_size - 1)
 
+        # Dropout layer
         self.dropout = nn.Dropout(dropout_value)
 
+        # Log softmax is used as the activation for the final layer since it
         self.softmax = nn.LogSoftmax(dim=-1)
 
+        # Assign the device to train the model (GPU or CPU)
         self.to(device)
 
     def init_hidden(self, batch_size=1):
@@ -430,19 +433,26 @@ class RNNLanguageModel(LanguageModel, nn.Module):
                 torch.zeros(self.num_layers, batch_size, self.model_dec, device=self.device))
 
     def forward(self, x, hidden=None):
+        # If the hidden state is None, initialize it
         if hidden is None:
             hidden = self.init_hidden(x.size(0))
 
+        # Convert the converted indices to the vector embeddings
         embedded = self.embedding(x)
 
+        # Send the embedding through LSTM
         output, (hidden, cell) = self.lstm(embedded, hidden)
 
+        # Apply the dropout for output
         output = self.dropout(output)
 
+        # Linear layer to get the vector of the vocabulary size
         linear = self.linear(output)
 
+        # convert it to log prob probabilities by applying log softmax activation
         final_output = self.softmax(linear)
 
+        # return final output layer and the hidden states
         return final_output, (hidden, cell)
 
     def get_log_prob_single(self, next_char, context, hidden=None):
