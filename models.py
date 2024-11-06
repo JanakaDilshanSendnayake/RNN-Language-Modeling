@@ -6,8 +6,6 @@ import torch
 import torch.nn as nn
 import random
 from matplotlib import pyplot as plt
-from torch.ao.nn.quantized.functional import leaky_relu
-from torch.nn.functional import dropout
 
 plt.style.use('ggplot')
 import os
