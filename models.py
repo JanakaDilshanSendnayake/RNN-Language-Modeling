@@ -6,8 +6,6 @@ import torch
 import torch.nn as nn
 import random
 from matplotlib import pyplot as plt
-from torch.ao.nn.quantized.functional import leaky_relu
-from torch.nn.functional import dropout
 
 plt.style.use('ggplot')
 import os
@@ -337,6 +335,7 @@ def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, de
         ax2.grid(True)
         ax2.set_title('Training and Development Accuracy')
 
+        # Saved the plot figure
         plt.savefig('classifier_accuracy_loss.png')
 
         #Saving the trained model
@@ -602,16 +601,19 @@ def train_lm(args, train_text, dev_text, vocab_index):
         print("Dev text: ", len(chunked_dev_text))
         print("Vocab size: ", vocab_index.__len__())
 
+        # Evaluation process on the development set
         for epoch in range(epochs):
-            total_loss = 0
-            language_model.train()
+            total_loss = 0 # Assign total training loss 0 for each starting epoch
+            language_model.train() # Set the model to training mode
 
             for i in range(0, len(train_chunks), batch_size):
-                batch_chunks = train_chunks[i:i + batch_size]
-                batch_targets = train_targets[i:i + batch_size]
+                batch_chunks = train_chunks[i:i + batch_size]  # Get the batch chunks for training
+                batch_targets = train_targets[i:i + batch_size] # Get the batch targets for training
 
+                # Zero the gradients before the forward pass
                 optimizer.zero_grad()
 
+                # Handle burn-in for training set
                 if burn_in_length > 0:
                     with torch.no_grad():
                         # Only use burn_in_length characters for burn-in
@@ -628,59 +630,80 @@ def train_lm(args, train_text, dev_text, vocab_index):
                 # Detach hidden state for next batch
                 hidden = (hidden[0].detach(), hidden[1].detach())
 
+                # Apply the forward pass to the model input  and get the predicted tensor
                 y_output, hidden = language_model(model_input, hidden)
 
+                # reshape the predicted tensor
                 y_output = y_output.view(-1, vocab_index.__len__() - 1)
+
+                # reshape the target tensor
                 batch_targets = batch_targets.reshape(-1)
 
+                # Calculate the loss
                 loss = loss_function(y_output, batch_targets)
+
+                # Add the loss to the total loss
                 total_loss += loss.item()
 
+                # Execute the back propagation
                 loss.backward()
+
+                # Update the weights
                 optimizer.step()
 
                 # print(f"Epoch : {epoch + 1}", [torch.argmax(x).cpu().item() for x in y_output], batch_targets)
 
             language_model.eval()
             with torch.no_grad():
-                dev_total_loss = 0
+                dev_total_loss = 0 # Assign total testing loss 0 for each starting epoch
                 for i in range(0, len(dev_chunks), batch_size):
-                    batch_dev_chunks = dev_chunks[i:i + batch_size]
-                    batch_dev_targets = dev_targets[i:i + batch_size]
+                    batch_dev_chunks = dev_chunks[i:i + batch_size] # Get the batch chunks for testing
+                    batch_dev_targets = dev_targets[i:i + batch_size] # Get the batch targets for testing
 
+                    # Handle burn-in for dev set
                     if burn_in_length > 0:
-                        # Only use burn_in_length characters for burn-in
-                        burn_in_input = batch_dev_chunks[:, :burn_in_length]
-                        burn_out, hidden = language_model(burn_in_input)
+                        burn_in_input = batch_dev_chunks[:, :burn_in_length] # burn in input
+                        burn_out, hidden = language_model(burn_in_input)  # burn in output and hidden state
 
-                        model_input = batch_dev_chunks[:, burn_in_length:]
-                        batch_dev_targets = batch_dev_targets[:, burn_in_length:]
+                        model_input = batch_dev_chunks[:, burn_in_length:]  # model input after burn in
+                        batch_dev_targets = batch_dev_targets[:, burn_in_length:] # model output target value
                     else:
                         model_input = batch_dev_chunks
                         hidden = None
 
+                    # reshape dev targets to 1 dimension
                     batch_dev_targets = batch_dev_targets.reshape(-1)
+
+                    # Apply the forward pass to the model input  and get the predicted tensor
                     y_output, hidden = language_model(model_input, hidden)
 
+                    # reshape the predicted tensor
                     y_output = y_output.view(-1, vocab_index.__len__() - 1)
 
+                    # Calculate the test loss
                     dev_loss = loss_function(y_output, batch_dev_targets)
 
+                    # Add the loss to the total loss
                     dev_total_loss += dev_loss.item()
 
+                # Calculate the batch amount for both training and testing data
                 n_train_batches = (len(train_chunks) + batch_size - 1) // batch_size
                 n_test_batches = (len(dev_chunks) + batch_size - 1) // batch_size
 
+                # Calculate the train average loss and store it
                 train_avg_loss = total_loss / n_train_batches
                 train_los_ar.append(train_avg_loss)
 
+                # Calculate the test average loss and store it
                 dev_avg_loss = dev_total_loss / n_test_batches
                 dev_loss_ar.append(dev_avg_loss)
 
+                # Print the average loss values of each epoch
                 print(f"Epoch : {epoch + 1}")
                 print(f"Train Average Loss : {train_avg_loss}")
                 print(f"Test Average Loss : {dev_avg_loss}")
 
+        # Plot training and testing loss
         plt.plot(epoch_array, train_los_ar, label='Train Loss')
         plt.plot(epoch_array, dev_loss_ar, label='Dev Loss')
         plt.xlabel('Epoch')
@@ -689,6 +712,7 @@ def train_lm(args, train_text, dev_text, vocab_index):
         plt.legend()
         plt.savefig('language_model_loss.png')
 
+        # Return the language model
         return language_model
 
     except Exception as e:
