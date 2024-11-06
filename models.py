@@ -6,12 +6,11 @@ import torch
 import torch.nn as nn
 import random
 from matplotlib import pyplot as plt
-
-plt.style.use('ggplot')
 import os
 from utils import Indexer
 import argparse
 import warnings
+plt.style.use('ggplot')
 warnings.filterwarnings("ignore", category=FutureWarning)
 
 
@@ -269,7 +268,7 @@ def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, de
 
             # Evaluation phase
             rnn_classification_model.eval()  # Set the model to evaluation mode
-            total_test_loss = 0   #  # Assign total loss 0
+            total_test_loss = 0   # Assign total loss 0
             test_correct = 0      # Assign total correct predictions 0
 
             # Batch testing for the epoch
@@ -403,7 +402,7 @@ class RNNLanguageModel(LanguageModel, nn.Module):
 
         self.num_layers = num_layers  # set number of hidden layers for lstm
 
-        self.vocab_size = vocab_index.__len__() # get the dictionary size of the index (27 due to start of sequence tag is added)
+        self.vocab_size = vocab_index.__len__()  # Get the dictionary size of the index (27 due to start of sequence tag is added)
 
         # Embedding layer to convert character indices to dense vectors
         self.embedding = nn.Embedding(num_embeddings=self.vocab_size + 1, embedding_dim=model_emb)
@@ -466,7 +465,6 @@ class RNNLanguageModel(LanguageModel, nn.Module):
 
         # convert the context text to a tensor and move it to device
         context_text = torch.tensor([context_indices], dtype=torch.long).to(self.device)
-
 
         with torch.no_grad():
             # Get the output and hidden states
@@ -596,7 +594,6 @@ def train_lm(args, train_text, dev_text, vocab_index):
         # Assign the optimizer as Adam optimizer with learning rate
         optimizer = torch.optim.Adam(language_model.parameters(), lr=learning_rate)
 
-
         print("Train text: ", len(chunked_train_text))
         print("Dev text: ", len(chunked_dev_text))
         print("Vocab size: ", vocab_index.__len__())
@@ -662,11 +659,11 @@ def train_lm(args, train_text, dev_text, vocab_index):
 
                     # Handle burn-in for dev set
                     if burn_in_length > 0:
-                        burn_in_input = batch_dev_chunks[:, :burn_in_length] # burn in input
+                        burn_in_input = batch_dev_chunks[:, :burn_in_length]  # burn in input
                         burn_out, hidden = language_model(burn_in_input)  # burn in output and hidden state
 
                         model_input = batch_dev_chunks[:, burn_in_length:]  # model input after burn in
-                        batch_dev_targets = batch_dev_targets[:, burn_in_length:] # model output target value
+                        batch_dev_targets = batch_dev_targets[:, burn_in_length:]  # model output target value
                     else:
                         model_input = batch_dev_chunks
                         hidden = None
@@ -725,14 +722,17 @@ def train_lm(args, train_text, dev_text, vocab_index):
 #################
 
 def run_experiment(max_context_length=20):
+    # Paths to the datasets and the trained model
     DEV_CONS_PATH = r"data/dev-consonant-examples.txt"
     DEV_VOWEL_PATH = r"data/dev-vowel-examples.txt"
     MODEL_PATH = r"trained_models/rnn_binary_classifier.pth"
 
-    if max_context_length not in range(1,21):
+    # Ensure the max_context_length is within valid range [1, 20]
+    if max_context_length not in range(1, 21):
         print(f"Max context length should be in range [1, 20]")
         return
 
+    # Function to load text
     def load_examples(filename):
         examples = []
         with open(filename, 'r') as f:
@@ -740,47 +740,58 @@ def run_experiment(max_context_length=20):
                 examples.append(line)
         return examples
 
+    # Helper function to load the trained RNN model
     def load_rnn_classifier(model_path):
         try:
-            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-            model = torch.load(model_path, map_location=device)
-            model.eval()
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # Use GPU if available
+            model = torch.load(model_path, map_location=device)  # Load the model
+            model.eval()  # Set the model to evaluation mode
             print("Model loaded successfully.")
             return model
         except FileNotFoundError:
             print(f"Error: The model file '{model_path}' was not found.")
             raise
 
+    # Function to evaluate the model on different context lengths and calculate accuracy and analyze class imbalances
     def evaluate_model_on_context_lengths(model, consonant_examples, vowel_examples):
 
-        accuracy_by_length = {}
+        accuracy_by_length = {}  # Dictionary to store accuracy for each context length
         vowels = 'aeiou'
 
-        context_lengths = []
-        vowel_counts = []
-        consonant_counts = []
+        context_lengths = []   # List to store context lengths
+        vowel_counts = []      # List to store the count of vowel examples
+        consonant_counts = []  # List to store the count of consonant examples
 
+        #  Loop through all context lengths from 1 to max context length
         for length in range(1, max_context_length + 1):
+            # Trim the examples to the current context length
             if length == 20:
-                trimmed_consonants = [ex[:length ] for ex in consonant_examples]
-                trimmed_vowels = [ex[:length ] for ex in vowel_examples]
+                # When the context length is 20, we don't need to classify the examples as they are
+                # from separate files already classified as vowels and consonants
+                trimmed_consonants = [ex[:length] for ex in consonant_examples]
+                trimmed_vowels = [ex[:length] for ex in vowel_examples]
             else:
+                # When the context length is less than 20, we need to trim the examples to `length + 1`
+                # characters because we need to check the next character (context_length + 1 character)
+                # to reclassify them as either vowels or consonants.
                 trimmed_text = [ex[:length + 1] for ex in consonant_examples + vowel_examples]
-                trimmed_vowels = []
-                trimmed_consonants = []
 
+                trimmed_vowels = []      # Initialize empty list for vowels
+                trimmed_consonants = []  # Initialize empty list for consonants
+
+                # Iterate through the trimmed examples and reclassify based on the last character.
                 for ex in trimmed_text:
-                    if ex[-1] in vowels:
-                        trimmed_vowels.append(ex[:-1])
-                    else:
-                        trimmed_consonants.append(ex[:-1])
+                    if ex[-1] in vowels:  # If the last character is a vowel, classify as vowel
+                        trimmed_vowels.append(ex[:-1])  # Remove the last character and add to vowel list
+                    else:  # If the last character isn't a vowel, classify as consonant
+                        trimmed_consonants.append(ex[:-1])  # Remove the last character and add to consonant list
 
-            # Append data to lists
+            # Append data to lists to analyze the class imbalances
             context_lengths.append(length)
             vowel_counts.append(len(trimmed_vowels))
             consonant_counts.append(len(trimmed_consonants))
 
-            # model evaluation
+            # Model evaluation: Calculate accuracy for the current context length
             correct_predictions = sum(1 for ex in trimmed_consonants if model.predict(ex) == 0)
             correct_predictions += sum(1 for ex in trimmed_vowels if model.predict(ex) == 1)
             total = len(trimmed_consonants) + len(trimmed_vowels)
@@ -789,16 +800,19 @@ def run_experiment(max_context_length=20):
             accuracy_by_length[length] = accuracy
             print(f"Context length {length}: Accuracy = {accuracy:.3f}")
 
-        class_imbalance_data = {
+        # Prepare data for class imbalance visualization
+        class_imbalances_data = {
             'context_length': context_lengths,
             'vowel_count': vowel_counts,
             'consonant_count': consonant_counts
         }
 
-        return accuracy_by_length, class_imbalance_data
+        return accuracy_by_length, class_imbalances_data
 
+    # Create plots directory if it doesn't exist
     os.makedirs('plots', exist_ok=True)
 
+    # Function to visualize accuracy trend vs context length
     def visualize_accuracy_trend(accuracy_data, title):
         save_path = os.path.join('plots', 'accuracy_vs_context_length.png')
         lengths = list(accuracy_data.keys())
@@ -814,6 +828,7 @@ def run_experiment(max_context_length=20):
         plt.close()
         print(f'Accuracy vs context length plot was saved to {save_path}.')
 
+    # Function to visualize class imbalance (vowel vs consonant counts) for different context length
     def visualize_class_imbalance(data):
         save_path = os.path.join('plots', 'class_imbalance_vs_context_length.png')
         x = np.arange(len(data['context_length']))  # the label locations
@@ -864,7 +879,7 @@ def run_experiment(max_context_length=20):
         print(f"An error occurred while loading the model: {e}")
         return
 
-    # Evaluate and visualize
+    # Evaluate and visualize the results
     print("\nEvaluating RNN Classifier")
     rnn_accuracy_data, class_imbalance_data = evaluate_model_on_context_lengths(rnn_model, dev_cons_exs, dev_vowel_exs)
     visualize_accuracy_trend(rnn_accuracy_data, "RNN Classifier Accuracy vs. Context Length")
@@ -875,6 +890,7 @@ def main():
     # Set up argument parser
     parser = argparse.ArgumentParser(description="Run the consonant vowel classification experiment for different "
                                                  "context length.")
+    # Add argument for the maximum context length, with a default of 20.
     parser.add_argument("--max_context_length", type=int, default=20, help="Maximum context length for evaluation.")
 
     # Parse arguments
