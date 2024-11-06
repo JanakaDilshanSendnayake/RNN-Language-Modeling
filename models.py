@@ -534,7 +534,7 @@ def chunk_required_data(text, chunk_size, vocab_index, overlap_size=1):
 
 
 def extract_required_indices(extracted_text, extracted_target, vocab_index):
-    # Add SOS token to each sequence instead of the whole list
+    # Add SOS (Start of Sequence) token to each sequence instead of the whole list
     text_indices = np.asarray([[vocab_index.index_of("sos")] + [vocab_index.index_of(x) for x in seq]
                                for seq in extracted_text])
     # Get the target value of the indices
@@ -554,35 +554,47 @@ def train_lm(args, train_text, dev_text, vocab_index):
     :return: an RNNLanguageModel instance trained on the given data
     """
     try:
-        chunk_size = 20
-        overlap_size = 5
-        learning_rate = 0.002
-        epochs = 10
-        batch_size = 8
-        burn_in_length = 5
-        lstm_layer_count = 1
-        embedding_size = 16
-        hidden_layers = 40
+        chunk_size = 20   # Assign the text chunking size
+        overlap_size = 5   # Assign the text overlapping size
+        learning_rate = 0.002  # Assign the learning rate
+        epochs = 10  # Assign the epoch amount
+        batch_size = 8     # Assign the batch size
+        burn_in_length = 5  # Assign the burn in length
+        lstm_layer_count = 1 # Assign the number of LSTM layers
+        embedding_size = 16  # Assign the embedding size
+        hidden_layers = 40  # Assign the hidden layer size
 
+        # Add the start of sequence token to the vocabulary
         vocab_index.add_and_get_index("sos")
 
+        # set the device as cuda if gpu is available, otherwise cpu
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+        # chunk and get the target indices of the train and dev text
         chunked_train_text, target_train = chunk_required_data(train_text, chunk_size, vocab_index, overlap_size)
         chunked_dev_text, target_test = chunk_required_data(dev_text, chunk_size, vocab_index, overlap_size)
 
-        train_los_ar = []
-        dev_loss_ar = []
+        # Lists to store loss values for plotting
+        train_los_ar = []  # Train loss list
+        dev_loss_ar = []   # Dev loss list
+
+        # Array to store the epoch values
         epoch_array = np.array([x for x in range(1, epochs + 1)])
 
-        train_chunks = torch.from_numpy(chunked_train_text).long().to(device)
-        train_targets = torch.from_numpy(target_train).long().to(device)
-        dev_chunks = torch.from_numpy(chunked_dev_text).long().to(device)
-        dev_targets = torch.from_numpy(target_test).long().to(device)
+        # Convert the numpy arrays to torch tensors and move them to the device
+        train_chunks = torch.from_numpy(chunked_train_text).long().to(device) # train chunks tensor
+        train_targets = torch.from_numpy(target_train).long().to(device) # train target tensor
+        dev_chunks = torch.from_numpy(chunked_dev_text).long().to(device) # dev chunks tensor
+        dev_targets = torch.from_numpy(target_test).long().to(device)  # dev target tensor
 
+        # Initialize the RNN language model
         language_model = RNNLanguageModel(model_emb=embedding_size, model_dec=hidden_layers, vocab_index=vocab_index,
                                           num_layers=lstm_layer_count, device=str(device))
-        loss_function = nn.NLLLoss().to(device)  # Negative log likelihood
+
+        # Assign the loss function as Negative log likelihood as the loss function
+        loss_function = nn.NLLLoss().to(device)
+
+        # Assign the optimizer as Adam optimizer with learning rate
         optimizer = torch.optim.Adam(language_model.parameters(), lr=learning_rate)
 
 
