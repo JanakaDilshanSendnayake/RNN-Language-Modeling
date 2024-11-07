@@ -337,7 +337,7 @@ def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, de
         # Saved the plot figure
         plt.savefig('classifier_accuracy_loss.png')
 
-        #Saving the trained model
+        # Saving the trained model
         os.makedirs('trained_models', exist_ok=True)
         model_save_path = os.path.join('trained_models', 'rnn_binary_classifier.pth')
         torch.save(rnn_classification_model, model_save_path)
