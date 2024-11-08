@@ -337,7 +337,7 @@ def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, de
         # Saved the plot figure
         plt.savefig('classifier_accuracy_loss.png')
 
-        #Saving the trained model
+        # Saving the trained model
         os.makedirs('trained_models', exist_ok=True)
         model_save_path = os.path.join('trained_models', 'rnn_binary_classifier.pth')
         torch.save(rnn_classification_model, model_save_path)
@@ -570,7 +570,7 @@ def train_lm(args, train_text, dev_text, vocab_index):
         burn_in_length = 5  # Assign the burn in length
         lstm_layer_count = 1 # Assign the number of LSTM layers
         embedding_size = 16  # Assign the embedding size
-        hidden_layers = 40  # Assign the hidden layer size
+        hidden_layers = 60  # Assign the hidden layer size
 
         # Add the start of sequence token to the vocabulary
         vocab_index.add_and_get_index("sos")
