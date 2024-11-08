@@ -559,7 +559,7 @@ def train_lm(args, train_text, dev_text, vocab_index):
         burn_in_length = 5  # Assign the burn in length
         lstm_layer_count = 1 # Assign the number of LSTM layers
         embedding_size = 16  # Assign the embedding size
-        hidden_layers = 40  # Assign the hidden layer size
+        hidden_layers = 60  # Assign the hidden layer size
 
         # Add the start of sequence token to the vocabulary
         vocab_index.add_and_get_index("sos")
