@@ -431,6 +431,9 @@ class RNNLanguageModel(LanguageModel, nn.Module):
                 torch.zeros(self.num_layers, batch_size, self.model_dec, device=self.device))
 
     def forward(self, x, hidden=None):
+        """ Processes the input tensor through embedding, LSTM layers, dropout,
+        and a linear layer to produce log probabilities"""
+
         # If the hidden state is None, initialize it
         if hidden is None:
             hidden = self.init_hidden(x.size(0))
@@ -454,6 +457,8 @@ class RNNLanguageModel(LanguageModel, nn.Module):
         return final_output, (hidden, cell)
 
     def get_log_prob_single(self, next_char, context, hidden=None):
+        """Calculate the log probability of a single character given the context"""
+
         # Set the model to evaluation mode
         self.eval()
 
@@ -490,6 +495,7 @@ class RNNLanguageModel(LanguageModel, nn.Module):
             return log_probability, hidden_output
 
     def get_log_prob_sequence(self, next_chars, context):
+        """Calculate the log probability of a character given the context"""
 
         # Assign log probability as 0
         total_log_probability = 0
@@ -515,6 +521,8 @@ class RNNLanguageModel(LanguageModel, nn.Module):
 
 
 def chunk_required_data(text, chunk_size, vocab_index, overlap_size=1):
+    """Split the text into overlapping chunks and extract their indices"""
+
     chunks_extracted = []
     target_extracted = []
 
@@ -531,6 +539,9 @@ def chunk_required_data(text, chunk_size, vocab_index, overlap_size=1):
 
 
 def extract_required_indices(extracted_text, extracted_target, vocab_index):
+    """Convert text sequences and target sequences into index representation 
+    using the vocabulary index"""
+
     # Add SOS (Start of Sequence) token to each sequence instead of the whole list
     text_indices = np.asarray([[vocab_index.index_of("sos")] + [vocab_index.index_of(x) for x in seq]
                                for seq in extracted_text])
@@ -760,8 +771,16 @@ def run_experiment(max_context_length=20):
             print(f"Error: The model file '{model_path}' was not found.")
             raise
 
-    # Function to evaluate the model on different context lengths and calculate accuracy and analyze class imbalances
     def evaluate_model_on_context_lengths(model, consonant_examples, vowel_examples):
+        """Evaluate the model on different context length, calculating accuracy and analyzing class imabalances.
+        
+        :param model: Model used to predict vowel or consonant classification
+        :param consonant_examples: List of examples classified as consonants
+        :param vowel_examples: List of examples classified as vowels
+
+        :return accuracy_by_length: Dictionary with context lengths as keys and accuracy as values
+        :return class_imbalances_data: Dictionary containing data for class imbalance visualization
+        """
 
         accuracy_by_length = {}  # Dictionary to store accuracy for each context length
         vowels = 'aeiou'
@@ -820,8 +839,9 @@ def run_experiment(max_context_length=20):
     # Create plots directory if it doesn't exist
     os.makedirs('plots', exist_ok=True)
 
-    # Function to visualize accuracy trend vs context length
     def visualize_accuracy_trend(accuracy_data, title):
+        """Visualize the accuracy trend across different context length and save the plot"""
+
         save_path = os.path.join('plots', 'accuracy_vs_context_length.png')
         lengths = list(accuracy_data.keys())
         accuracies = list(accuracy_data.values())
@@ -836,8 +856,10 @@ def run_experiment(max_context_length=20):
         plt.close()
         print(f'Accuracy vs context length plot was saved to {save_path}.')
 
-    # Function to visualize class imbalance (vowel vs consonant counts) for different context length
     def visualize_class_imbalance(data):
+        """Visualize class imbalance between vowel and consonant counts 
+        across different context lengths and save the plot"""
+
         save_path = os.path.join('plots', 'class_imbalance_vs_context_length.png')
         x = np.arange(len(data['context_length']))  # the label locations
         width = 0.35  # the width of the bars
