@@ -554,8 +554,8 @@ def train_lm(args, train_text, dev_text, vocab_index):
         chunk_size = 20   # Assign the text chunking size
         overlap_size = 5   # Assign the text overlapping size
         learning_rate = 0.002  # Assign the learning rate
-        epochs = 10  # Assign the epoch amount
-        batch_size = 8     # Assign the batch size
+        epochs = 20  # Assign the epoch amount
+        batch_size =  8    # Assign the batch size
         burn_in_length = 5  # Assign the burn in length
         lstm_layer_count = 1 # Assign the number of LSTM layers
         embedding_size = 16  # Assign the embedding size
@@ -598,6 +598,8 @@ def train_lm(args, train_text, dev_text, vocab_index):
         print("Dev text: ", len(chunked_dev_text))
         print("Vocab size: ", vocab_index.__len__())
 
+        hidden = None
+        test_hidden = None
         # Evaluation process on the development set
         for epoch in range(epochs):
             total_loss = 0 # Assign total training loss 0 for each starting epoch
@@ -617,18 +619,20 @@ def train_lm(args, train_text, dev_text, vocab_index):
                         burn_in_input = batch_chunks[:, :burn_in_length]
                         burn_out, hidden = language_model(burn_in_input)
 
-                        # print("Burn in input : ", burn_in_input, "Burn out : ", burn_out)
-
                     model_input = batch_chunks[:, burn_in_length:]
                     batch_targets = batch_targets[:, burn_in_length:]
                 else:
                     model_input = batch_chunks
 
-                # Detach hidden state for next batch
-                hidden = (hidden[0].detach(), hidden[1].detach())
+                if hidden is not None:
+                    # Detach hidden state for next batch
+                    hidden = (hidden[0].detach(), hidden[1].detach())
 
-                # Apply the forward pass to the model input  and get the predicted tensor
-                y_output, hidden = language_model(model_input, hidden)
+                    # Apply the forward pass to the model input  and get the predicted tensor
+                    y_output, hidden = language_model(model_input, hidden)
+                else:
+                    # Apply the forward pass to the model input  and get the predicted tensor
+                    y_output, hidden = language_model(model_input)
 
                 # reshape the predicted tensor
                 y_output = y_output.view(-1, vocab_index.__len__() - 1)
@@ -648,7 +652,6 @@ def train_lm(args, train_text, dev_text, vocab_index):
                 # Update the weights
                 optimizer.step()
 
-                # print(f"Epoch : {epoch + 1}", [torch.argmax(x).cpu().item() for x in y_output], batch_targets)
 
             language_model.eval()
             with torch.no_grad():
@@ -660,19 +663,24 @@ def train_lm(args, train_text, dev_text, vocab_index):
                     # Handle burn-in for dev set
                     if burn_in_length > 0:
                         burn_in_input = batch_dev_chunks[:, :burn_in_length]  # burn in input
-                        burn_out, hidden = language_model(burn_in_input)  # burn in output and hidden state
+                        burn_out, test_hidden = language_model(burn_in_input)  # burn in output and hidden state
 
                         model_input = batch_dev_chunks[:, burn_in_length:]  # model input after burn in
                         batch_dev_targets = batch_dev_targets[:, burn_in_length:]  # model output target value
                     else:
                         model_input = batch_dev_chunks
-                        hidden = None
 
                     # reshape dev targets to 1 dimension
                     batch_dev_targets = batch_dev_targets.reshape(-1)
 
-                    # Apply the forward pass to the model input  and get the predicted tensor
-                    y_output, hidden = language_model(model_input, hidden)
+                    if test_hidden is not None:
+                        # Detach hidden state for next batch
+                        test_hidden = (test_hidden[0].detach(), test_hidden[1].detach())
+
+                        # Apply the forward pass to the model input  and get the predicted tensor
+                        y_output, test_hidden = language_model(model_input, test_hidden)
+                    else:
+                        y_output, test_hidden = language_model(model_input)
 
                     # reshape the predicted tensor
                     y_output = y_output.view(-1, vocab_index.__len__() - 1)
