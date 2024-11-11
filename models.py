@@ -6,13 +6,17 @@ import torch
 import torch.nn as nn
 import random
 from matplotlib import pyplot as plt
+import seaborn as sns
 import os
 from utils import Indexer
 import argparse
 import warnings
+from sklearn.metrics import confusion_matrix
 plt.style.use('ggplot')
 warnings.filterwarnings("ignore", category=FutureWarning)
 
+os.makedirs('trained_models', exist_ok=True)
+os.makedirs('plots', exist_ok=True)
 
 #####################
 # MODELS FOR PART 1 #
@@ -214,6 +218,9 @@ def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, de
         # Assign the optimizer as Adam optimizer with learning rate and a weight decay (to handle overfitting)
         optimizer = torch.optim.Adam(rnn_classification_model.parameters(), lr=learning_rate, weight_decay=0.0001)
 
+        true_labels = []
+        predicted_labels = []
+
         # Start the training process
         for epoch in range(epochs):
             rnn_classification_model.train() # Set the model to training mode
@@ -298,6 +305,10 @@ def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, de
                     _, test_predicted = torch.max(y.data, 1)
                     test_correct += (test_predicted == batch_test_label).sum().item()
 
+                    if epoch == epochs - 1:
+                        true_labels.extend(batch_test_label.cpu().numpy())
+                        predicted_labels.extend(test_predicted.cpu().numpy())
+
 
                 n_test_batches = (n_test_samples + batch_size - 1) // batch_size # Calculate the number of batches
                 avg_test_loss = total_test_loss / n_test_batches     # Calculate the average loss
@@ -309,8 +320,21 @@ def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, de
             print(f'Epoch {epoch + 1}:') # Print the epoch number
             print(f'Training Loss: {avg_loss:.4f}')    # Print the training loss
             print(f'Test Loss: {avg_test_loss:.4f}')   # Print the test loss
-            print(f'Training Accuracy: {train_accuracy:.3f}') # Print the training accuracy
+            print(f'Training Accuracy: {train_accuracy:.3f}')  # Print the training accuracy
             print(f'Test Accuracy: {test_accuracy :.3f}')    # Print the test accuracy
+
+        # Compute confusion matrix
+        class_names = ["Consonant", "Vowel"]
+        cm = confusion_matrix(true_labels, predicted_labels)
+        plt.figure(figsize=(6, 6))
+        sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", cbar=False,
+                    xticklabels=class_names, yticklabels=class_names)
+        plt.xlabel("Predicted Labels")
+        plt.ylabel("True Labels")
+        plt.title(f"Confusion Matrix")
+        save_path = os.path.join('plots', f'confusion_matrix.png')
+        plt.savefig(save_path)
+        plt.close()
 
         # Plot the accuracy and loss curves
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
@@ -333,12 +357,11 @@ def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, de
         ax2.legend()
         ax2.grid(True)
         ax2.set_title('Training and Development Accuracy')
-
+        save_path = os.path.join('plots', 'classifier_accuracy_loss.png')
         # Saved the plot figure
-        plt.savefig('classifier_accuracy_loss.png')
+        plt.savefig(save_path)
 
         # Saving the trained model
-        os.makedirs('trained_models', exist_ok=True)
         model_save_path = os.path.join('trained_models', 'rnn_binary_classifier.pth')
         torch.save(rnn_classification_model, model_save_path)
         print(f'Model saved to {model_save_path}')
@@ -726,7 +749,8 @@ def train_lm(args, train_text, dev_text, vocab_index):
         plt.ylabel('Loss')
         plt.title('Training and Development Loss of the Language model')
         plt.legend()
-        plt.savefig('language_model_loss.png')
+        save_path = os.path.join('plots', 'language_model_loss.png')
+        plt.savefig(save_path)
 
         # Return the language model
         return language_model
@@ -838,9 +862,6 @@ def run_experiment(max_context_length=20, print_ok=True):
         }
 
         return accuracy_by_length, class_imbalances_data
-
-    # Create plots directory if it doesn't exist
-    os.makedirs('plots', exist_ok=True)
 
     def visualize_accuracy_trend(accuracy_data, title):
         """Visualize the accuracy trend across different context length and save the plot"""
