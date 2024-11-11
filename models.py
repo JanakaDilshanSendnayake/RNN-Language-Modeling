@@ -342,7 +342,7 @@ def train_rnn_classifier(args, train_cons_exs, train_vowel_exs, dev_cons_exs, de
         model_save_path = os.path.join('trained_models', 'rnn_binary_classifier.pth')
         torch.save(rnn_classification_model, model_save_path)
         print(f'Model saved to {model_save_path}')
-
+        run_experiment(max_context_length=20, print_ok=False)
         # Return the trained model
         return rnn_classification_model
 
@@ -740,7 +740,7 @@ def train_lm(args, train_text, dev_text, vocab_index):
 # VISUALIZATION #
 #################
 
-def run_experiment(max_context_length=20):
+def run_experiment(max_context_length=20, print_ok=True):
     # Paths to the datasets and the trained model
     DEV_CONS_PATH = r"data/dev-consonant-examples.txt"
     DEV_VOWEL_PATH = r"data/dev-vowel-examples.txt"
@@ -825,7 +825,10 @@ def run_experiment(max_context_length=20):
             accuracy = correct_predictions / total
 
             accuracy_by_length[length] = accuracy
-            print(f"Context length {length}: Accuracy = {accuracy:.3f}")
+            if print_ok:
+                print(f"Context length {length}: Accuracy = {accuracy:.3f}")
+            else:
+                pass
 
         # Prepare data for class imbalance visualization
         class_imbalances_data = {
@@ -865,8 +868,8 @@ def run_experiment(max_context_length=20):
         width = 0.35  # the width of the bars
 
         fig, ax = plt.subplots(figsize=(12, 6))
-        bars1 = ax.bar(x - width / 2, data['vowel_count'], width, label='Vowel Count', color='blue')
-        bars2 = ax.bar(x + width / 2, data['consonant_count'], width, label='Consonant Count', color='red')
+        bars1 = ax.bar(x - width / 2, data['vowel_count'], width, label='Vowel Count', color='navy')
+        bars2 = ax.bar(x + width / 2, data['consonant_count'], width, label='Consonant Count', color='orange')
 
         # Adding labels and title
         ax.set_xlabel('Context Length')
@@ -910,7 +913,7 @@ def run_experiment(max_context_length=20):
         return
 
     # Evaluate and visualize the results
-    print("\nEvaluating RNN Classifier")
+    print("\nEvaluating RNN Classifier for different context lengths")
     rnn_accuracy_data, class_imbalance_data = evaluate_model_on_context_lengths(rnn_model, dev_cons_exs, dev_vowel_exs)
     visualize_accuracy_trend(rnn_accuracy_data, "RNN Classifier Accuracy vs. Context Length")
     visualize_class_imbalance(class_imbalance_data)
@@ -922,6 +925,7 @@ def main():
                                                  "context length.")
     # Add argument for the maximum context length, with a default of 20.
     parser.add_argument("--max_context_length", type=int, default=20, help="Maximum context length for evaluation.")
+    parser.add_argument("--print", type=bool, default=True, help="Print evaluation results for each context length.")
 
     # Parse arguments
     args = parser.parse_args()
