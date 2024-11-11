@@ -586,14 +586,14 @@ def train_lm(args, train_text, dev_text, vocab_index):
     """
     try:
         chunk_size = 20   # Assign the text chunking size
-        overlap_size = 5   # Assign the text overlapping size
-        learning_rate = 0.002  # Assign the learning rate
-        epochs = 20  # Assign the epoch amount
+        overlap_size = 2   # Assign the text overlapping size
+        learning_rate = 0.001  # Assign the learning rate
+        epochs = 15  # Assign the epoch amount
         batch_size =  8    # Assign the batch size
         burn_in_length = 5  # Assign the burn in length
-        lstm_layer_count = 1 # Assign the number of LSTM layers
+        lstm_layer_count = 2 # Assign the number of LSTM layers
         embedding_size = 16  # Assign the embedding size
-        hidden_layers = 60  # Assign the hidden layer size
+        hidden_layers = 128  # Assign the hidden layer size
 
         # Add the start of sequence token to the vocabulary
         vocab_index.add_and_get_index("sos")
