@@ -634,7 +634,7 @@ def train_lm(args, train_text, dev_text, vocab_index):
 
         hidden = None
         test_hidden = None
-        # Evaluation process on the development set
+        # Model Training process
         for epoch in range(epochs):
             total_loss = 0 # Assign total training loss 0 for each starting epoch
             language_model.train() # Set the model to training mode
